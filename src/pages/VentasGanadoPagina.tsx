@@ -1,20 +1,233 @@
-import type { FormEvent } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2 } from 'lucide-react'
-import { api } from '../lib/api'
-import { notify, requestConfirmation } from '../lib/feedback'
-import type { Animal, Entity, PagedResult } from '../types'
-import { Button, Card, Input, Select } from '../components/ui'
-import { PageHeader } from '../components/Page'
+import type { FormEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2 } from "lucide-react";
+import { api } from "../lib/api";
+import { notify, requestConfirmation } from "../lib/feedback";
+import type { Animal, Entity, PagedResult } from "../types";
+import { Button, Card, Input, Select } from "../components/ui";
+import { PageHeader } from "../components/Page";
+import { formatearMoneda, useMonedaTenant } from "../lib/moneda";
 
-interface Venta { id:string; codigo:string; fecha:string; cantidad:number; ingreso:number; estado:string }
+interface Venta {
+  id: string;
+  codigo: string;
+  fecha: string;
+  cantidad: number;
+  ingreso: number;
+  estado: string;
+}
 
 export function VentasGanadoPagina() {
-  const client=useQueryClient()
-  const animals=useQuery({queryKey:['animals-sale'],queryFn:()=>api<PagedResult<Animal>>('/animales?pageSize=100')})
-  const entities=useQuery({queryKey:['entities'],queryFn:()=>api<PagedResult<Entity>>('/entidades?pageSize=100')})
-  const sales=useQuery({queryKey:['sales'],queryFn:()=>api<Venta[]>('/ventas-ganado')})
-  const submit=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();const form=event.currentTarget;const data=new FormData(form);const animalIds=data.getAll('animales').map(String);try{await api('/ventas-ganado',{method:'POST',body:JSON.stringify({fecha:data.get('fecha'),compradorId:data.get('comprador'),animalIds,modalidad:data.get('modalidad'),ingresoTotal:Number(data.get('ingreso')),transporte:Number(data.get('transporte')||0),comision:Number(data.get('comision')||0),otrosGastos:Number(data.get('otros')||0),documento:data.get('documento')||null,metodoPago:data.get('metodoPago')||null,observaciones:data.get('observaciones')||null})});form.reset();notify({tone:'success',title:'Borrador creado',message:'Los bovinos continúan en inventario hasta confirmar la venta.'});await client.invalidateQueries({queryKey:['sales']})}catch(error){notify({tone:'error',title:'No se guardó la venta',message:error instanceof Error?error.message:'Ocurrió un error inesperado.'})}}
-  const confirmar=async(venta:Venta)=>{if(!await requestConfirmation({title:'Confirmar venta',message:`Se retirarán ${venta.cantidad} bovino(s) del inventario y se registrará el ingreso.`,confirmLabel:'Confirmar venta',cancelLabel:'Volver'}))return;try{await api(`/ventas-ganado/${venta.id}/confirmar`,{method:'POST'});notify({tone:'success',title:'Venta confirmada',message:'Los bovinos salieron del inventario y conservan su expediente.'});await Promise.all([client.invalidateQueries({queryKey:['sales']}),client.invalidateQueries({queryKey:['animals']}),client.invalidateQueries({queryKey:['animals-sale']})])}catch(error){notify({tone:'error',title:'No se confirmó la venta',message:error instanceof Error?error.message:'Ocurrió un error inesperado.'})}}
-  return <><PageHeader eyebrow="Salidas" title="Ventas de ganado" description="La venta se prepara en borrador. Solo la confirmación retira bovinos y registra el ingreso."/><div className="grid gap-5 lg:grid-cols-[1fr_420px]"><Card><form onSubmit={event=>void submit(event)} className="grid gap-4"><div className="grid gap-4 md:grid-cols-2"><Input name="fecha" label="Fecha de venta *" type="date" required defaultValue={new Date().toISOString().slice(0,10)}/><Select name="comprador" label="Entidad compradora *" required><option value="">Seleccionar…</option>{entities.data?.items.map(x=><option key={x.id} value={x.id}>{x.codigo} · {x.nombreCompletoORazonSocial}</option>)}</Select><Select name="modalidad" label="Modalidad *"><option>PorCabeza</option><option>PorLibra</option></Select><Input name="ingreso" label="Precio total de venta (GTQ) *" type="number" min="0" step="0.01" required/><Input name="transporte" label="Transporte (GTQ)" type="number" min="0" step="0.01"/><Input name="comision" label="Comisión (GTQ)" type="number" min="0" step="0.01"/><Input name="otros" label="Otros gastos (GTQ)" type="number" min="0" step="0.01"/><Input name="documento" label="Factura o documento"/><Input name="metodoPago" label="Método de pago"/><Input name="observaciones" label="Observaciones"/></div><fieldset><legend className="text-sm font-medium">Bovinos a vender *</legend><div className="mt-2 grid max-h-72 gap-2 overflow-y-auto sm:grid-cols-2">{animals.data?.items.map(animal=><label key={animal.id} className="flex gap-2 rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800"><input type="checkbox" name="animales" value={animal.id}/><span><b>{animal.codigoAnimal}</b>{animal.arete?` · Arete ${animal.arete}`:''}<span className="block text-xs text-slate-500">{animal.propietario} · {animal.sexo} · {animal.categoria}</span></span></label>)}</div></fieldset><Button type="submit">Guardar borrador</Button></form></Card><Card><h2 className="font-display text-lg font-bold">Ventas registradas</h2><div className="mt-3 grid gap-2">{sales.data?.map(venta=><div key={venta.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800"><div><p className="font-semibold">{venta.codigo} · {venta.cantidad} bovino(s)</p><p className="text-xs text-slate-500">{new Date(venta.fecha).toLocaleDateString('es-GT')} · {venta.estado} · Q {venta.ingreso.toFixed(2)}</p></div>{venta.estado==='Borrador'&&<button type="button" onClick={()=>void confirmar(venta)} title="Confirmar venta" className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-500"><CheckCircle2 size={20}/></button>}</div>)}</div></Card></div></>
+  const { moneda, cultura } = useMonedaTenant();
+  const client = useQueryClient();
+  const animals = useQuery({
+    queryKey: ["animals-sale"],
+    queryFn: () => api<PagedResult<Animal>>("/animales?pageSize=100"),
+  });
+  const entities = useQuery({
+    queryKey: ["entities"],
+    queryFn: () => api<PagedResult<Entity>>("/entidades?pageSize=100"),
+  });
+  const sales = useQuery({
+    queryKey: ["sales"],
+    queryFn: () => api<Venta[]>("/ventas-ganado"),
+  });
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const animalIds = data.getAll("animales").map(String);
+    try {
+      await api("/ventas-ganado", {
+        method: "POST",
+        body: JSON.stringify({
+          fecha: data.get("fecha"),
+          compradorId: data.get("comprador"),
+          animalIds,
+          modalidad: data.get("modalidad"),
+          ingresoTotal: Number(data.get("ingreso")),
+          transporte: Number(data.get("transporte") || 0),
+          comision: Number(data.get("comision") || 0),
+          otrosGastos: Number(data.get("otros") || 0),
+          documento: data.get("documento") || null,
+          metodoPago: data.get("metodoPago") || null,
+          observaciones: data.get("observaciones") || null,
+        }),
+      });
+      form.reset();
+      notify({
+        tone: "success",
+        title: "Borrador creado",
+        message:
+          "Los bovinos continúan en inventario hasta confirmar la venta.",
+      });
+      await client.invalidateQueries({ queryKey: ["sales"] });
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "No se guardó la venta",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Ocurrió un error inesperado.",
+      });
+    }
+  };
+  const confirmar = async (venta: Venta) => {
+    if (
+      !(await requestConfirmation({
+        title: "Confirmar venta",
+        message: `Se retirarán ${venta.cantidad} bovino(s) del inventario y se registrará el ingreso.`,
+        confirmLabel: "Confirmar venta",
+        cancelLabel: "Volver",
+      }))
+    )
+      return;
+    try {
+      await api(`/ventas-ganado/${venta.id}/confirmar`, { method: "POST" });
+      notify({
+        tone: "success",
+        title: "Venta confirmada",
+        message:
+          "Los bovinos salieron del inventario y conservan su expediente.",
+      });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["sales"] }),
+        client.invalidateQueries({ queryKey: ["animals"] }),
+        client.invalidateQueries({ queryKey: ["animals-sale"] }),
+      ]);
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "No se confirmó la venta",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Ocurrió un error inesperado.",
+      });
+    }
+  };
+  return (
+    <>
+      <PageHeader
+        eyebrow="Salidas"
+        title="Ventas de ganado"
+        description="La venta se prepara en borrador. Solo la confirmación retira bovinos y registra el ingreso."
+      />
+      <div className="grid gap-5 lg:grid-cols-[1fr_420px]">
+        <Card>
+          <form onSubmit={(event) => void submit(event)} className="grid gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input
+                name="fecha"
+                label="Fecha de venta *"
+                type="date"
+                required
+                defaultValue={new Date().toISOString().slice(0, 10)}
+              />
+              <Select name="comprador" label="Entidad compradora *" required>
+                <option value="">Seleccionar…</option>
+                {entities.data?.items.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.codigo} · {x.nombreCompletoORazonSocial}
+                  </option>
+                ))}
+              </Select>
+              <Select name="modalidad" label="Modalidad *">
+                <option>PorCabeza</option>
+                <option>PorLibra</option>
+              </Select>
+              <Input
+                name="ingreso"
+                label={`Precio total de venta${moneda ? ` (${moneda})` : ""} *`}
+                type="number"
+                min="0"
+                step="0.01"
+                required
+              />
+              <Input
+                name="transporte"
+                label={`Transporte${moneda ? ` (${moneda})` : ""}`}
+                type="number"
+                min="0"
+                step="0.01"
+              />
+              <Input
+                name="comision"
+                label={`Comisión${moneda ? ` (${moneda})` : ""}`}
+                type="number"
+                min="0"
+                step="0.01"
+              />
+              <Input
+                name="otros"
+                label={`Otros gastos${moneda ? ` (${moneda})` : ""}`}
+                type="number"
+                min="0"
+                step="0.01"
+              />
+              <Input name="documento" label="Factura o documento" />
+              <Input name="metodoPago" label="Método de pago" />
+              <Input name="observaciones" label="Observaciones" />
+            </div>
+            <fieldset>
+              <legend className="text-sm font-medium">
+                Bovinos a vender *
+              </legend>
+              <div className="mt-2 grid max-h-72 gap-2 overflow-y-auto sm:grid-cols-2">
+                {animals.data?.items.map((animal) => (
+                  <label
+                    key={animal.id}
+                    className="flex gap-2 rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800"
+                  >
+                    <input type="checkbox" name="animales" value={animal.id} />
+                    <span>
+                      <b>{animal.codigoAnimal}</b>
+                      {animal.arete ? ` · Arete ${animal.arete}` : ""}
+                      <span className="block text-xs text-slate-500">
+                        {animal.propietario} · {animal.sexo} ·{" "}
+                        {animal.categoria}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <Button type="submit">Guardar borrador</Button>
+          </form>
+        </Card>
+        <Card>
+          <h2 className="font-display text-lg font-bold">Ventas registradas</h2>
+          <div className="mt-3 grid gap-2">
+            {sales.data?.map((venta) => (
+              <div
+                key={venta.id}
+                className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800"
+              >
+                <div>
+                  <p className="font-semibold">
+                    {venta.codigo} · {venta.cantidad} bovino(s)
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {new Date(venta.fecha).toLocaleDateString("es-GT")} ·{" "}
+                    {venta.estado} · {formatearMoneda(venta.ingreso, moneda, cultura)}
+                  </p>
+                </div>
+                {venta.estado === "Borrador" && (
+                  <button
+                    type="button"
+                    onClick={() => void confirmar(venta)}
+                    title="Confirmar venta"
+                    className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-500"
+                  >
+                    <CheckCircle2 size={20} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </>
+  );
 }
