@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { api } from "../lib/api";
 import { notify, requestConfirmation } from "../lib/feedback";
+import { formatearMoneda, useMonedaTenant } from "../lib/moneda";
 import type { Animal, AnimalRecord, CatalogItem, InventoryMovement, PagedResult } from "../types";
 import { Badge, Button, Card, Input, Select } from "../components/ui";
 import { PageHeader } from "../components/Page";
@@ -59,6 +60,7 @@ const Empty = ({ children }: { children: ReactNode }) => (
 );
 
 export function AnimalDetailPage() {
+  const { moneda, cultura } = useMonedaTenant();
   const { id = "" } = useParams();
   const [tab, setTab] = useState<Tab>("Resumen");
   const [action, setAction] = useState<"parto" | "baja" | null>(null);
@@ -799,7 +801,7 @@ export function AnimalDetailPage() {
                     Baja {x.tipo}
                     {x.causa ? ` · ${x.causa}` : ""}
                     {x.valorEconomicoEstimado
-                      ? ` · pérdida estimada Q ${x.valorEconomicoEstimado.toFixed(2)}`
+                      ? ` · pérdida estimada ${formatearMoneda(x.valorEconomicoEstimado, moneda, cultura)}`
                       : ""}
                   </Field>
                 </div>

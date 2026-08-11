@@ -1009,6 +1009,7 @@ export function AnimalWizardPage() {
                 {...form.register(
                   'numeroReferenciaOrigen',
                 )}
+                disabled={Boolean(editId)}
               />
 
               <Input
@@ -1016,6 +1017,7 @@ export function AnimalWizardPage() {
                 {...form.register(
                   'textoReferenciaOrigen',
                 )}
+                disabled={Boolean(editId)}
               />
 
               <Select
@@ -1023,6 +1025,7 @@ export function AnimalWizardPage() {
                 {...form.register(
                   'entidadOrigenId',
                 )}
+                disabled={Boolean(editId)}
               >
                 <option value="">
                   No especificada
@@ -1049,6 +1052,7 @@ export function AnimalWizardPage() {
                 {...form.register(
                   'fechaIncorporacion',
                 )}
+                disabled={Boolean(editId)}
               />
 
               <Input label="Origen de incorporación" value="Carga inicial" disabled className="md:col-span-2" />

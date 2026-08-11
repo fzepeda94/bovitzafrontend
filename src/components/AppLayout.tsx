@@ -555,6 +555,12 @@ export function AppLayout() {
   }, [transfersOpen])
 
   useEffect(() => {
+    if (location.pathname.startsWith('/transferencias')) {
+      setTransfersOpen(true)
+    }
+  }, [location.pathname])
+
+  useEffect(() => {
     if (
       !location.pathname.startsWith(
         '/datos-maestros',
