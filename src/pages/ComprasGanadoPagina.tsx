@@ -6,7 +6,7 @@ import { notify, requestConfirmation } from "../lib/feedback";
 import type { CatalogItem, Entity, PagedResult } from "../types";
 import { Button, Card, Input, Select } from "../components/ui";
 import { PageHeader } from "../components/Page";
-import { useMonedaTenant } from "../lib/moneda";
+import { formatearMoneda, useMonedaTenant } from "../lib/moneda";
 
 interface Compra {
   id: string;
@@ -20,7 +20,7 @@ interface Compra {
 }
 
 export function ComprasGanadoPagina() {
-  const { moneda } = useMonedaTenant();
+  const { moneda, cultura } = useMonedaTenant();
   const [cantidad, setCantidad] = useState(1);
   const client = useQueryClient();
   const entities = useQuery({
@@ -335,7 +335,7 @@ export function ComprasGanadoPagina() {
               </div>
               <div className="flex items-center gap-3">
                 <p className="font-semibold">
-                  Q {item.precioCompraOriginal.toFixed(2)}
+                  {formatearMoneda(item.precioCompraOriginal, moneda, cultura)}
                 </p>
                 {item.estado === "Borrador" && (
                   <button
