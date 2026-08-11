@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+html { color-scheme: light; overflow-x: clip; }
+html.dark { color-scheme: dark; }
+html, body, #root { width: 100%; min-height: 100%; }
+body { margin: 0; min-width: 320px; min-height: 100vh; overflow-x: clip; }
+img, svg { max-width: 100%; }
+.pwa-safe-top { padding-top: env(safe-area-inset-top); }
+.pwa-safe-y { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+.app-sidebar {
+  width: min(18rem, calc(100vw - 2.5rem));
+  transform: translateX(-100%);
+  transition: width 200ms ease, transform 200ms ease;
+}
+.app-sidebar.is-open { transform: translateX(0); }
+.app-shell { height: 100vh; height: 100dvh; overflow: hidden; }
+.app-content {
+  height: 100vh;
+  height: 100dvh;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  transition: padding-left 200ms ease;
+}
+.app-sidebar nav {
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.app-sidebar nav::-webkit-scrollbar { width: 0; height: 0; }
+.app-content form p.text-pine-700 { display: none; }
+@media (min-width: 1024px) {
+  .app-content section:has(> form) { align-self: start; }
+}
+@media (min-width: 1024px) {
+  .app-sidebar { width: 18rem; transform: translateX(0); }
+  .app-sidebar.is-collapsed { width: 5rem; }
+  .app-content { padding-left: 18rem; }
+  .app-content.sidebar-is-collapsed { padding-left: 5rem; }
+}
+button, input, select, textarea { font: inherit; }
+::selection { background: #d7e8df; color: #173f35; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }

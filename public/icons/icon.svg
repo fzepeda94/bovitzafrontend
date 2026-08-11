@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Vaca de BovItzá">
+  <rect width="512" height="512" rx="112" fill="#173f35"/>
+  <path d="M177 160c-35-10-64-35-76-72-4-12-20-15-28-5-23 31-4 91 61 119" fill="#f3efe4" stroke="#d18a50" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M335 160c35-10 64-35 76-72 4-12 20-15 28-5 23 31 4 91-61 119" fill="#f3efe4" stroke="#d18a50" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M155 190c-44-28-91-20-112 7 25 42 66 54 112 36M357 190c44-28 91-20 112 7-25 42-66 54-112 36" fill="#d18a50" stroke="#f3efe4" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M135 226c0-85 51-137 121-137s121 52 121 137v75c0 91-50 147-121 147s-121-56-121-147Z" fill="#f3efe4"/>
+  <path d="M155 177c35-56 81-70 123-55-5 37-27 75-66 103-22-5-41-20-57-48Z" fill="#2b2925"/>
+  <path d="M302 108c33 10 57 34 70 70-5 28-20 49-45 64-20-33-29-78-25-134Z" fill="#d18a50"/>
+  <ellipse cx="256" cy="342" rx="91" ry="67" fill="#d18a50"/>
+  <circle cx="205" cy="254" r="14" fill="#172b27"/><circle cx="307" cy="254" r="14" fill="#172b27"/>
+  <path d="M196 232c12-9 25-12 39-8M277 224c14-4 27-1 39 8" fill="none" stroke="#172b27" stroke-width="9" stroke-linecap="round"/>
+  <ellipse cx="222" cy="340" rx="12" ry="17" fill="#172b27"/><ellipse cx="290" cy="340" rx="12" ry="17" fill="#172b27"/>
+  <path d="M222 389c22 12 46 12 68 0" fill="none" stroke="#172b27" stroke-width="10" stroke-linecap="round"/>
+</svg>
