@@ -26,7 +26,6 @@ import type {
   CatalogItem,
   Entity,
   Farm,
-  Lot,
   PagedResult,
   Pasture,
 } from '../types'
@@ -223,13 +222,6 @@ export function AnimalWizardPage() {
       api<PagedResult<Entity>>(
         '/entidades?page=1&pageSize=200&search=&incluirInactivos=false',
       ),
-  })
-
-  const lots = useQuery({
-    queryKey: ['lots'],
-
-    queryFn: () =>
-      api<Lot[]>('/lotes'),
   })
 
   const farms = useQuery({
@@ -549,19 +541,14 @@ export function AnimalWizardPage() {
         values.observacionOrigen ||
         null,
 
-      loteCompraId:
-        values.loteCompraId ||
-        null,
+      loteCompraId: null,
 
       fechaIncorporacion:
         values
           .fechaIncorporacion ||
         null,
 
-      motivoIncorporacion:
-        values
-          .motivoIncorporacion ||
-        null,
+      motivoIncorporacion: 'CargaInicial',
 
       sexo:
         values.sexo,
@@ -1055,36 +1042,6 @@ export function AnimalWizardPage() {
                 )}
               </Select>
 
-              <Select
-                label="Lote de compra"
-                {...form.register(
-                  'loteCompraId',
-                )}
-              >
-                <option value="">
-                  Sin lote
-                </option>
-
-                {lots.data?.map(
-                  lot => (
-                    <option
-                      key={lot.id}
-                      value={lot.id}
-                    >
-                      {lot.nombre}
-                      {' · '}
-                      {
-                        lot.cantidadRegistrada
-                      }
-                      /
-                      {
-                        lot.cantidadEsperada
-                      }
-                    </option>
-                  ),
-                )}
-              </Select>
-
               <Input
                 label="Fecha de incorporación"
                 type="date"
@@ -1093,14 +1050,7 @@ export function AnimalWizardPage() {
                 )}
               />
 
-              <Input
-                label="Motivo de incorporación"
-                placeholder="Configúralo según el caso"
-                {...form.register(
-                  'motivoIncorporacion',
-                )}
-                className="md:col-span-2"
-              />
+              <Input label="Origen de incorporación" value="Carga inicial" disabled className="md:col-span-2" />
             </div>
           )}
 
@@ -1562,10 +1512,6 @@ export function AnimalWizardPage() {
               entities={
                 entityItems
               }
-              lots={
-                lots.data ??
-                []
-              }
               farms={
                 farmItems
               }
@@ -1700,13 +1646,11 @@ function calculateAge(
 function Review({
   values,
   entities,
-  lots,
   farms,
   pastures,
 }: {
   values: Values
   entities: Entity[]
-  lots: Lot[]
   farms: Farm[]
   pastures: Pasture[]
 }) {
@@ -1718,14 +1662,6 @@ function Review({
     )
       ?.nombreCompletoORazonSocial ??
     'Pendiente'
-
-  const lote =
-    lots.find(
-      item =>
-        item.id ===
-        values.loteCompraId,
-    )?.nombre ??
-    'Sin lote'
 
   const finca =
     farms.find(
@@ -1780,11 +1716,6 @@ function Review({
       values.fechaNacimiento ||
         values
           .precisionFechaNacimiento,
-    ],
-
-    [
-      'Lote',
-      lote,
     ],
 
     [
