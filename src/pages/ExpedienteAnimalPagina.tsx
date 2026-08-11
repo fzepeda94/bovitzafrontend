@@ -65,6 +65,7 @@ export function AnimalDetailPage() {
   const [message, setMessage] = useState("");
   const [numeroCrias, setNumeroCrias] = useState(1);
   const [desteteAbierto, setDesteteAbierto] = useState(false);
+  const [busquedaPadre, setBusquedaPadre] = useState("");
   const client = useQueryClient();
   const animalQuery = useQuery({
     queryKey: ["animal", id],
@@ -87,8 +88,8 @@ export function AnimalDetailPage() {
     queryFn: () => api<CatalogItem[]>("/catalogos/tipos-parto"),
   });
   const padresQuery = useQuery({
-    queryKey: ["animals", "possible-fathers"],
-    queryFn: () => api<PagedResult<Animal>>("/animales?pageSize=100&incluirHistoricos=true"),
+    queryKey: ["animals", "possible-fathers", busquedaPadre],
+    queryFn: () => api<PagedResult<Animal>>(`/animales/padres-posibles?page=1&pageSize=50&search=${encodeURIComponent(busquedaPadre)}`),
   });
   const animal = animalQuery.data;
   const record = recordQuery.data;
@@ -411,7 +412,8 @@ export function AnimalDetailPage() {
                 Registrar parto
               </Button>
             )}
-            {animal.estadoVida === "Activo" && animal.madreAnimalId && (
+            {animal.estadoVida === "Activo" &&
+              (animal.categoria === "Ternera" || animal.categoria === "Ternero") && (
               <Button
                 variant="secondary"
                 onClick={() => setDesteteAbierto(true)}
@@ -486,6 +488,7 @@ export function AnimalDetailPage() {
                   <option value="">No especificado</option>
                   {tiposPartoQuery.data?.map((tipo) => <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>)}
                 </Select>
+                <Input label="Buscar padre" value={busquedaPadre} onChange={(event) => setBusquedaPadre(event.target.value)} placeholder="Código, arete o referencia" />
                 <Select name="padreAnimalId" label="Padre de la cría">
                   <option value="">No conocido</option>
                   {padresQuery.data?.items.filter((posiblePadre) => posiblePadre.sexo === "Macho").map((posiblePadre) =>
