@@ -59,6 +59,7 @@ type NavigationItem = {
 type MenuGroup =
   | 'animals'
   | 'masters'
+  | 'transfers'
   | 'finance'
   | 'security'
 
@@ -82,21 +83,12 @@ const topNavigation: NavigationItem[] = [
     label: 'ANÁLISIS Y REPORTES',
     icon: Database,
   },
-  {
-    to: '/transferencias/cambio-propietario',
-    label: 'TRANSFERENCIAS',
-    icon: RefreshCw,
-  },
-  {
-    to: '/transferencias/recibidas',
-    label: 'RECEPCIONES EXTERNAS',
-    icon: RefreshCw,
-  },
-  {
-    to: '/transferencias/enviadas',
-    label: 'ENVÍOS EXTERNOS',
-    icon: RefreshCw,
-  },
+]
+
+const transferNavigation: NavigationItem[] = [
+  { to: '/transferencias/cambio-propietario', label: 'Cambio de propietario', icon: RefreshCw },
+  { to: '/transferencias/recibidas', label: 'Recibidas', icon: RefreshCw },
+  { to: '/transferencias/enviadas', label: 'Enviadas', icon: RefreshCw },
 ]
 
 const animalNavigation: NavigationItem[] = [
@@ -284,6 +276,10 @@ function initialGroupState(
     )
   }
 
+  if (group === 'transfers') {
+    return pathname.startsWith('/transferencias')
+  }
+
   return (
     pathname.startsWith(
       '/seguridad',
@@ -410,6 +406,13 @@ export function AppLayout() {
       'security',
       location.pathname,
     ),
+  )
+
+  const [
+    transfersOpen,
+    setTransfersOpen,
+  ] = useState(() =>
+    initialGroupState('transfers', location.pathname),
   )
 
   const tenant = useQuery({
@@ -543,6 +546,13 @@ export function AppLayout() {
         : 'closed',
     )
   }, [securityOpen])
+
+  useEffect(() => {
+    localStorage.setItem(
+      'bovitza.menu.transfers',
+      transfersOpen ? 'open' : 'closed',
+    )
+  }, [transfersOpen])
 
   useEffect(() => {
     if (
@@ -957,6 +967,26 @@ export function AppLayout() {
               </NavLink>
             ),
           )}
+
+          <div className="pt-2">
+            {groupButton(
+              'TRANSFERENCIAS',
+              RefreshCw,
+              transfersOpen,
+              () => setTransfersOpen(current => !current),
+            )}
+
+            {transfersOpen && (
+              <div className={`ml-5 mt-1 space-y-1 border-l border-white/15 pl-2 ${sidebarCollapsed ? 'lg:hidden' : ''}`}>
+                {transferNavigation.map(({ to, label, icon: Icon }) => (
+                  <NavLink key={to} to={to} onClick={close} className={linkClass}>
+                    <Icon size={17} className="shrink-0" />
+                    <span>{label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="pt-2">
             {groupButton(

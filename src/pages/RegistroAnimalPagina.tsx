@@ -976,6 +976,7 @@ export function AnimalWizardPage() {
                     : {}
                 )}
                 required
+                disabled={Boolean(editId)}
               >
                 <option value="">
                   Seleccionar…
