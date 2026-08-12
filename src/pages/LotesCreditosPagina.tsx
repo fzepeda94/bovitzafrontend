@@ -1,108 +1,44 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState, type FormEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import type { Lot } from "../types";
-import { Card } from "../components/ui";
+import type { Entity, PagedResult } from "../types";
+import { Button, Card, Input, Select } from "../components/ui";
 import { PageHeader } from "../components/Page";
 import { formatearMoneda, useMonedaTenant } from "../lib/moneda";
+import { notify, requestConfirmation } from "../lib/feedback";
+import { calcularCostoFinanciero, calcularMaximoFinanciable, calcularPrincipalDisponible, endpointsCredito } from "../lib/creditos";
 
-interface Credit {
-  id: string;
-  principal: number;
-  totalContractual: number;
-  costoFinancieroContractual: number;
-  plazoMeses: number;
-  cantidadCuotas: number;
-  estado: string;
-}
+interface Lot { id: string; nombre: string; fechaCompra: string; propietarioAdquirenteId: string; cantidadEsperada: number; cantidadRegistrada: number; precioCompraOriginal: number; costoAdministrativoAtribuido: number; costoTotalCalculado: number; montoFinanciado: number; montoSinFinanciamientoRegistrado: number; estado: string }
+interface Credit { id: string; propietarioDeudorId: string; entidadFinanciera: string; numeroCredito: string | null; fechaDesembolso: string; principal: number; totalContractual: number; costoFinancieroContractual: number; montoAplicadoCompras: number; principalDisponible: number; plazoMeses: number; cantidadCuotas: number; frecuencia: string; tasa: number | null; estado: string; observaciones: string | null }
+interface Financing { id: string; loteCompraId: string; compra: string; fechaCompra: string; costoCompra: number; montoFinanciado: number; observaciones: string | null }
+
 export function LotsPage() {
-  const { moneda, cultura } = useMonedaTenant();
-  const lots = useQuery({
-    queryKey: ["lots"],
-    queryFn: () => api<Lot[]>("/lotes"),
-  });
-  const credits = useQuery({
-    queryKey: ["credits"],
-    queryFn: () => api<Credit[]>("/creditos"),
-  });
-  return (
-    <>
-      <PageHeader
-        eyebrow="Compras y valoración"
-        title="Lotes y crédito"
-        description="El precio histórico y la base administrativa se conservan separados; nunca se suman dos veces."
-      />
-      <div className="grid gap-5 lg:grid-cols-3">
-        {lots.data?.map((lot) => (
-          <Card key={lot.id}>
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-lg font-bold">{lot.nombre}</h2>
-              <span className="text-xs font-semibold text-pine-600">
-                {lot.estado}
-              </span>
-            </div>
-            <p className="mt-5 text-3xl font-extrabold">
-              {lot.cantidadRegistrada}
-              <span className="text-base font-medium text-slate-400">
-                {" "}
-                / {lot.cantidadEsperada}
-              </span>
-            </p>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full bg-pine-500"
-                style={{
-                  width: `${lot.cantidadEsperada ? (lot.cantidadRegistrada / lot.cantidadEsperada) * 100 : 0}%`,
-                }}
-              />
-            </div>
-            <dl className="mt-5 grid gap-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Precio original</dt>
-                <dd className="font-semibold">
-                  {formatearMoneda(lot.precioCompraOriginal, moneda, cultura)}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Base administrativa</dt>
-                <dd className="font-semibold">
-                  {formatearMoneda(lot.costoAdministrativoAtribuido, moneda, cultura)}
-                </dd>
-              </div>
-            </dl>
-          </Card>
-        ))}
-      </div>
-      {credits.data?.map((credit) => (
-        <Card key={credit.id} className="mt-5">
-          <h2 className="font-display text-lg font-bold">
-            Crédito {credit.id.slice(0, 8)}
-          </h2>
-          <div className="mt-5 grid gap-4 sm:grid-cols-3">
-            <Metric label="Principal" value={formatearMoneda(credit.principal, moneda, cultura)} />
-            <Metric
-              label="Total contractual"
-              value={formatearMoneda(credit.totalContractual, moneda, cultura)}
-            />
-            <Metric
-              label="Costo financiero"
-              value={formatearMoneda(credit.costoFinancieroContractual, moneda, cultura)}
-            />
-          </div>
-          <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
-            La distribución entre capital e interés de cada cuota permanece
-            pendiente hasta ingresar el plan real; el sistema no inventa una
-            tasa.
-          </p>
-        </Card>
-      ))}
-    </>
-  );
+  const { moneda, cultura } = useMonedaTenant(); const client = useQueryClient();
+  const [formulario, setFormulario] = useState(false); const [editando, setEditando] = useState<Credit | null>(null);
+  const [aplicando, setAplicando] = useState<Credit | null>(null); const [principal, setPrincipal] = useState(0); const [total, setTotal] = useState(0);
+  const [compraSeleccionada, setCompraSeleccionada] = useState(""); const [financiamientoEditando, setFinanciamientoEditando] = useState<Financing | null>(null);
+  const lots = useQuery({ queryKey: ["lots"], queryFn: () => api<Lot[]>("/lotes") });
+  const credits = useQuery({ queryKey: ["credits"], queryFn: () => api<Credit[]>("/creditos") });
+  const entities = useQuery({ queryKey: ["entities", "credits"], queryFn: () => api<PagedResult<Entity>>("/entidades?page=1&pageSize=200&search=&incluirInactivos=false") });
+  const financiamientos = useQuery({ queryKey: ["credit-financing", aplicando?.id], queryFn: () => api<Financing[]>(endpointsCredito.financiamientos(aplicando!.id)), enabled: !!aplicando });
+  const comprasDisponibles = useMemo(() => (lots.data ?? []).filter(l => aplicando && l.propietarioAdquirenteId === aplicando.propietarioDeudorId && (l.estado === "Completo" || l.estado === "Cerrado")), [lots.data, aplicando]);
+
+  const guardarCredito = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const data = new FormData(event.currentTarget); try {
+    const body = JSON.stringify({ propietarioDeudorId: data.get("propietarioDeudorId"), entidadFinanciera: data.get("entidadFinanciera"), numeroCredito: data.get("numeroCredito") || null, fechaDesembolso: data.get("fechaDesembolso"), principal: Number(data.get("principal")), plazoMeses: Number(data.get("plazoMeses")), cantidadCuotas: Number(data.get("cantidadCuotas")), frecuencia: data.get("frecuencia"), tasa: data.get("tasa") ? Number(data.get("tasa")) : null, totalContractual: Number(data.get("totalContractual")), fechaPrimeraCuota: data.get("fechaPrimeraCuota") || null, observaciones: data.get("observaciones") || null });
+    await api(editando ? endpointsCredito.detalle(editando.id) : endpointsCredito.crear, { method: editando ? "PUT" : "POST", body });
+    notify({ tone: "success", title: "Crédito guardado como borrador", message: "El crédito todavía no puede aplicarse a compras hasta ser confirmado." }); setFormulario(false); setEditando(null); await client.invalidateQueries({ queryKey: ["credits"] });
+  } catch (error) { notify({ tone: "error", title: "No se guardó el crédito", message: error instanceof Error ? error.message : "Ocurrió un error inesperado." }); } };
+
+  const confirmar = async (credito: Credit) => { if (!await requestConfirmation({ title: "Confirmar crédito", message: "Al confirmar el crédito los datos contractuales quedarán bloqueados y podrá utilizarse para registrar financiamiento de compras.", confirmLabel: "Confirmar", cancelLabel: "Volver" })) return; await api(endpointsCredito.confirmar(credito.id), { method: "POST" }); await client.invalidateQueries({ queryKey: ["credits"] }); };
+  const anular = async (credito: Credit) => { if (!await requestConfirmation({ title: "Anular borrador", message: "El crédito borrador quedará cancelado.", confirmLabel: "Anular", cancelLabel: "Volver" })) return; await api(endpointsCredito.anular(credito.id), { method: "POST" }); await client.invalidateQueries({ queryKey: ["credits"] }); };
+  const aplicar = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!aplicando) return; const data = new FormData(event.currentTarget); const options = { method: financiamientoEditando ? "PUT" : "POST", body: JSON.stringify({ loteCompraId: data.get("loteCompraId"), montoFinanciado: Number(data.get("montoFinanciado")), observaciones: data.get("observaciones") || null }) }; await api(financiamientoEditando ? endpointsCredito.financiamiento(aplicando.id, financiamientoEditando.id) : endpointsCredito.aplicar(aplicando.id), options); notify({ tone: "success", title: financiamientoEditando ? "Aplicación actualizada" : "Financiamiento aplicado", message: "La atribución no modifica la compra, los animales ni el inventario." }); setFinanciamientoEditando(null); setCompraSeleccionada(""); await Promise.all([client.invalidateQueries({ queryKey: ["credits"] }), client.invalidateQueries({ queryKey: ["lots"] }), financiamientos.refetch()]); };
+  const quitar = async (id: string) => { if (!aplicando || !await requestConfirmation({ title: "Quitar aplicación", message: "Esta acción únicamente elimina la atribución de financiamiento. No modifica la compra, los animales ni el inventario.", confirmLabel: "Quitar", cancelLabel: "Volver" })) return; await api(endpointsCredito.financiamiento(aplicando.id, id), { method: "DELETE" }); await Promise.all([client.invalidateQueries({ queryKey: ["credits"] }), client.invalidateQueries({ queryKey: ["lots"] }), financiamientos.refetch()]); };
+
+  return <><PageHeader eyebrow="Finanzas" title="Lotes y créditos" description="Las compras y sus fuentes de financiamiento se administran por separado." actions={<Button onClick={() => { setFormulario(true); setEditando(null); setPrincipal(0); setTotal(0); }}>Registrar crédito</Button>} />
+    {formulario && <Card className="mb-5"><form onSubmit={guardarCredito} className="grid gap-4 md:grid-cols-2"><Select name="propietarioDeudorId" label="Entidad deudora *" required defaultValue={editando?.propietarioDeudorId}><option value="">Seleccionar…</option>{entities.data?.items.map(e => <option key={e.id} value={e.id}>{e.nombreCompletoORazonSocial}</option>)}</Select><Input name="entidadFinanciera" label="Entidad financiera *" required defaultValue={editando?.entidadFinanciera}/><Input name="numeroCredito" label="Número de crédito" defaultValue={editando?.numeroCredito ?? ""}/><Input name="fechaDesembolso" label="Fecha de desembolso *" type="date" required defaultValue={editando?.fechaDesembolso?.slice(0,10)}/><Input name="principal" label="Principal *" type="number" min="0.0001" step="0.0001" required defaultValue={editando?.principal} onChange={e => setPrincipal(Number(e.target.value))}/><Input name="totalContractual" label="Total contractual *" type="number" min="0.0001" step="0.0001" required defaultValue={editando?.totalContractual} onChange={e => setTotal(Number(e.target.value))}/><Input label="Costo financiero" value={formatearMoneda(calcularCostoFinanciero(principal, total), moneda, cultura)} disabled/><Input name="plazoMeses" label="Plazo en meses *" type="number" min="1" required defaultValue={editando?.plazoMeses}/><Input name="cantidadCuotas" label="Cantidad de cuotas *" type="number" min="1" required defaultValue={editando?.cantidadCuotas}/><Input name="frecuencia" label="Frecuencia *" required defaultValue={editando?.frecuencia ?? "Mensual"}/><Input name="tasa" label="Tasa" type="number" min="0" step="0.0001" defaultValue={editando?.tasa ?? ""}/><Input name="fechaPrimeraCuota" label="Fecha primera cuota" type="date"/><Input name="observaciones" label="Observaciones" defaultValue={editando?.observaciones ?? ""} className="md:col-span-2"/><div className="flex gap-2 md:col-span-2"><Button type="submit">Guardar borrador</Button><Button type="button" variant="ghost" onClick={() => setFormulario(false)}>Cancelar</Button></div></form></Card>}
+    <div className="grid gap-5 lg:grid-cols-3">{lots.data?.map(lot => <Card key={lot.id}><h2 className="font-display text-lg font-bold">{lot.nombre}</h2><Metric label="Costo total" value={formatearMoneda(lot.costoTotalCalculado, moneda, cultura)}/><Metric label="Financiamiento registrado" value={formatearMoneda(lot.montoFinanciado, moneda, cultura)}/><Metric label="Monto sin financiamiento registrado" value={formatearMoneda(lot.montoSinFinanciamientoRegistrado, moneda, cultura)}/></Card>)}</div>
+    {credits.data?.map(c => <Card key={c.id} className="mt-5"><div className="flex flex-wrap justify-between gap-3"><div><h2 className="font-display text-lg font-bold">{c.numeroCredito || `Crédito ${c.id.slice(0,8)}`}</h2><p className="text-sm text-slate-500">{c.entidadFinanciera} · {c.estado}</p></div><div className="flex gap-2">{c.estado === "Borrador" && <><Button variant="secondary" onClick={() => { setEditando(c); setFormulario(true); setPrincipal(c.principal); setTotal(c.totalContractual); }}>Editar</Button><Button onClick={() => void confirmar(c)}>Confirmar</Button><Button variant="danger" onClick={() => void anular(c)}>Anular</Button></>}{c.estado === "Vigente" && <Button onClick={() => setAplicando(c)}>Aplicar a compra</Button>}</div></div><div className="mt-5 grid gap-3 sm:grid-cols-3"><Metric label="Principal" value={formatearMoneda(c.principal, moneda, cultura)}/><Metric label="Aplicado a compras" value={formatearMoneda(c.montoAplicadoCompras, moneda, cultura)}/><Metric label="Principal disponible" value={formatearMoneda(c.principalDisponible, moneda, cultura)}/><Metric label="Total contractual" value={formatearMoneda(c.totalContractual, moneda, cultura)}/><Metric label="Costo financiero" value={formatearMoneda(c.costoFinancieroContractual, moneda, cultura)}/><Metric label="Condiciones" value={`${c.plazoMeses} meses · ${c.cantidadCuotas} cuotas · ${c.frecuencia}${c.tasa == null ? "" : ` · ${c.tasa}%`}`}/></div><p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">El detalle de cuotas se registrará cuando se disponga del plan real del crédito.</p></Card>)}
+    {aplicando && <Card className="mt-5"><h2 className="font-display text-lg font-bold">Financiamiento aplicado · {aplicando.numeroCredito || aplicando.id.slice(0,8)}</h2><p className="mt-1 text-sm">Principal disponible: {formatearMoneda(calcularPrincipalDisponible(aplicando.principal, aplicando.montoAplicadoCompras), moneda, cultura)}</p><form key={financiamientoEditando?.id ?? "nuevo"} onSubmit={aplicar} className="mt-4 grid gap-4 md:grid-cols-3"><Select name="loteCompraId" label="Compra *" required disabled={!!financiamientoEditando} value={financiamientoEditando?.loteCompraId ?? compraSeleccionada} onChange={e => setCompraSeleccionada(e.target.value)}><option value="">Seleccionar…</option>{comprasDisponibles.map(l => <option key={l.id} value={l.id}>{l.nombre} · disponible {formatearMoneda(l.montoSinFinanciamientoRegistrado, moneda, cultura)}</option>)}</Select><Input name="montoFinanciado" label="Monto financiado *" type="number" min="0.0001" step="0.0001" defaultValue={financiamientoEditando?.montoFinanciado} max={calcularMaximoFinanciable(aplicando.principalDisponible + (financiamientoEditando?.montoFinanciado ?? 0), (lots.data?.find(l => l.id === (financiamientoEditando?.loteCompraId ?? compraSeleccionada))?.montoSinFinanciamientoRegistrado ?? 0) + (financiamientoEditando?.montoFinanciado ?? 0))}/><Input name="observaciones" label="Observaciones" defaultValue={financiamientoEditando?.observaciones ?? ""}/><div className="flex gap-2 md:col-span-3"><Button type="submit">{financiamientoEditando ? "Actualizar aplicación" : "Aplicar"}</Button>{financiamientoEditando && <Button type="button" variant="ghost" onClick={() => setFinanciamientoEditando(null)}>Cancelar edición</Button>}<Button type="button" variant="ghost" onClick={() => setAplicando(null)}>Cerrar</Button></div></form><div className="mt-4 grid gap-2">{financiamientos.data?.map(f => <div key={f.id} className="flex items-center justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-800"><span>{f.compra} · {formatearMoneda(f.montoFinanciado, moneda, cultura)} de {formatearMoneda(f.costoCompra, moneda, cultura)}</span><div className="flex gap-2"><Button variant="secondary" onClick={() => { setFinanciamientoEditando(f); setCompraSeleccionada(f.loteCompraId); }}>Editar</Button><Button variant="danger" onClick={() => void quitar(f.id)}>Quitar</Button></div></div>)}</div></Card>}
+  </>;
 }
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-800">
-      <p className="text-xs uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="mt-1 font-display text-xl font-bold">{value}</p>
-    </div>
-  );
-}
+function Metric({ label, value }: { label: string; value: string }) { return <div className="mt-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800"><p className="text-xs text-slate-500">{label}</p><p className="font-semibold">{value}</p></div>; }
