@@ -36,6 +36,7 @@ import {
   Select,
 } from '../components/ui'
 import { PageHeader } from '../components/Page'
+import { formatearMotivoIncorporacion } from '../lib/motivoIncorporacion'
 
 const schema = z
   .object({
@@ -548,7 +549,7 @@ export function AnimalWizardPage() {
           .fechaIncorporacion ||
         null,
 
-      motivoIncorporacion: 'CargaInicial',
+      motivoIncorporacion: editId ? values.motivoIncorporacion : 'CargaInicial',
 
       sexo:
         values.sexo,
@@ -1009,7 +1010,6 @@ export function AnimalWizardPage() {
                 {...form.register(
                   'numeroReferenciaOrigen',
                 )}
-                disabled={Boolean(editId)}
               />
 
               <Input
@@ -1017,7 +1017,6 @@ export function AnimalWizardPage() {
                 {...form.register(
                   'textoReferenciaOrigen',
                 )}
-                disabled={Boolean(editId)}
               />
 
               <Select
@@ -1055,7 +1054,8 @@ export function AnimalWizardPage() {
                 disabled={Boolean(editId)}
               />
 
-              <Input label="Origen de incorporación" value="Carga inicial" disabled className="md:col-span-2" />
+              <Input label="Observación de origen" {...form.register('observacionOrigen')} />
+              <Input label="Origen de incorporación" value={editId ? formatearMotivoIncorporacion(existing.data?.motivoIncorporacion) : "Carga inicial"} disabled className="md:col-span-2" />
             </div>
           )}
 
