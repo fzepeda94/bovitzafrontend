@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Eye, Plus, X } from "lucide-react";
+import { Ban, CheckCircle2, Eye, Pencil, Plus, X } from "lucide-react";
 import { api } from "../lib/api";
 import { notify, requestConfirmation } from "../lib/feedback";
 import type { CatalogItem, Entity, PagedResult } from "../types";
@@ -8,7 +8,7 @@ import { Button, Card, IconButton, Input, Pagination, Select } from "../componen
 import { PageHeader } from "../components/Page";
 import { formatearMoneda, useMonedaTenant } from "../lib/moneda";
 import { OPCIONES_CATEGORIA_ZOOTECNICA, OPCIONES_SEXO_ANIMAL } from "../lib/opcionesAnimales";
-import { ordenarEntidadesPorCodigo } from "../lib/comprasGanado";
+import { normalizarFechaCompraFormulario, ordenarEntidadesPorCodigo } from "../lib/comprasGanado";
 
 interface Compra {
   id: string;
@@ -20,12 +20,19 @@ interface Compra {
   precioCompraOriginal: number;
   estado: string;
 }
-interface DetalleCompra extends Compra { propietarioAdquirenteNombre: string; vendedorNombre: string | null; documento: string | null; gastosTransporte: number; gastosVeterinariosIniciales: number; otrosGastos: number; costoTotalCalculado: number; observaciones: string | null; animales: { detalleId: string; animalId: string | null; codigoAnimal: string | null; sexo: string; categoria: string; arete: string | null; fechaNacimiento: string | null; razaNombre: string | null; colorNombre: string | null; precioIndividualInformado: number | null; costoOriginalAsignado: number | null; costoAdministrativoAsignado: number | null; costoTotalAsignado: number | null }[] }
+interface AnimalCompraDetalle { detalleId: string; animalId: string | null; codigoAnimal: string | null; sexo: string; categoria: string; arete: string | null; fechaNacimiento: string | null; razaId: string | null; razaNombre: string | null; colorId: string | null; colorNombre: string | null; precioIndividualInformado: number | null; costoOriginalAsignado: number | null; costoAdministrativoAsignado: number | null; costoTotalAsignado: number | null }
+interface DetalleCompra extends Compra { propietarioAdquirenteId: string; propietarioAdquirenteNombre: string; vendedorId: string | null; vendedorNombre: string | null; documento: string | null; gastosTransporte: number; gastosVeterinariosIniciales: number; otrosGastos: number; costoTotalCalculado: number; observaciones: string | null; animales: AnimalCompraDetalle[] }
+interface FilaAnimalCompra { sexo: string; categoria: string; arete: string; fechaNacimiento: string; razaId: string; colorId: string; precioIndividual: string }
+
+const crearFilaAnimal = (): FilaAnimalCompra => ({ sexo: "", categoria: "", arete: "", fechaNacimiento: "", razaId: "", colorId: "", precioIndividual: "" });
 
 export function ComprasGanadoPagina() {
   const { moneda, cultura } = useMonedaTenant();
   const [cantidad, setCantidad] = useState(1);
   const [formularioCompraAbierto, setFormularioCompraAbierto] = useState(false);
+  const [compraEditandoId, setCompraEditandoId] = useState<string | null>(null);
+  const [detalleEdicion, setDetalleEdicion] = useState<DetalleCompra | null>(null);
+  const [filasAnimales, setFilasAnimales] = useState<FilaAnimalCompra[]>([crearFilaAnimal()]);
   const [busqueda, setBusqueda] = useState("");
   const [pagina, setPagina] = useState(1);
   const [compraDetalleId, setCompraDetalleId] = useState<string | null>(null);
@@ -53,20 +60,74 @@ export function ComprasGanadoPagina() {
   const totalPages = Math.max(1, Math.ceil(comprasFiltradas.length / pageSize));
   const comprasPagina = comprasFiltradas.slice((pagina - 1) * pageSize, pagina * pageSize);
 
+  const cerrarFormulario = () => {
+    setFormularioCompraAbierto(false);
+    setCompraEditandoId(null);
+    setDetalleEdicion(null);
+    setCantidad(1);
+    setFilasAnimales([crearFilaAnimal()]);
+  };
+
+  const abrirNuevaCompra = () => {
+    setCompraDetalleId(null);
+    setCompraEditandoId(null);
+    setDetalleEdicion(null);
+    setCantidad(1);
+    setFilasAnimales([crearFilaAnimal()]);
+    setFormularioCompraAbierto(true);
+  };
+
+  const cambiarCantidad = (valor: number) => {
+    const nuevaCantidad = Math.max(1, Math.min(100, valor || 1));
+    setCantidad(nuevaCantidad);
+    setFilasAnimales((actuales) => Array.from({ length: nuevaCantidad }, (_, index) => actuales[index] ?? crearFilaAnimal()));
+  };
+
+  const actualizarFila = (index: number, cambio: Partial<FilaAnimalCompra>) => {
+    setFilasAnimales((actuales) => actuales.map((fila, posicion) => posicion === index ? { ...fila, ...cambio } : fila));
+  };
+
+  const editarCompra = async (compra: Compra) => {
+    if (compra.estado !== "Borrador") return;
+    try {
+      const detalle = await api<DetalleCompra>(`/compras-ganado/${compra.id}`);
+      if (detalle.estado !== "Borrador") {
+        notify({ tone: "error", title: "No se puede editar", message: "La compra ya no se encuentra en borrador." });
+        await client.invalidateQueries({ queryKey: ["purchases"] });
+        return;
+      }
+      const filas = detalle.animales.map((animal) => ({
+        sexo: animal.sexo,
+        categoria: animal.categoria,
+        arete: animal.arete ?? "",
+        fechaNacimiento: normalizarFechaCompraFormulario(animal.fechaNacimiento),
+        razaId: animal.razaId ?? "",
+        colorId: animal.colorId ?? "",
+        precioIndividual: animal.precioIndividualInformado?.toString() ?? "",
+      }));
+      setCompraDetalleId(null);
+      setCompraEditandoId(detalle.id);
+      setDetalleEdicion(detalle);
+      setCantidad(Math.max(1, filas.length));
+      setFilasAnimales(filas.length ? filas : [crearFilaAnimal()]);
+      setFormularioCompraAbierto(true);
+    } catch (error) {
+      notify({ tone: "error", title: "No se cargó la compra", message: error instanceof Error ? error.message : "Ocurrió un error inesperado." });
+    }
+  };
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    const animales = Array.from({ length: cantidad }, (_, index) => ({
-      sexo: data.get(`sexo-${index}`),
-      categoria: data.get(`categoria-${index}`),
-      arete: String(data.get(`arete-${index}`) || "") || null,
-      fechaNacimiento: String(data.get(`nacimiento-${index}`) || "") || null,
-      razaId: String(data.get(`raza-${index}`) || "") || null,
-      colorId: String(data.get(`color-${index}`) || "") || null,
-      precioIndividual: data.get(`precio-${index}`)
-        ? Number(data.get(`precio-${index}`))
-        : null,
+    const animales = filasAnimales.slice(0, cantidad).map((fila) => ({
+      sexo: fila.sexo,
+      categoria: fila.categoria,
+      arete: fila.arete || null,
+      fechaNacimiento: fila.fechaNacimiento || null,
+      razaId: fila.razaId || null,
+      colorId: fila.colorId || null,
+      precioIndividual: fila.precioIndividual ? Number(fila.precioIndividual) : null,
     }));
     const body = {
       fechaCompra: data.get("fecha"),
@@ -82,29 +143,55 @@ export function ComprasGanadoPagina() {
       animales,
     };
     try {
-      await api("/compras-ganado", {
-        method: "POST",
+      await api(compraEditandoId ? `/compras-ganado/${compraEditandoId}` : "/compras-ganado", {
+        method: compraEditandoId ? "PUT" : "POST",
         body: JSON.stringify(body),
       });
       notify({
         tone: "success",
-        title: "Borrador creado",
-        message:
-          "La compra todavía no afecta el inventario. Revísala y confírmala cuando esté completa.",
+        title: compraEditandoId ? "Compra actualizada" : "Borrador creado",
+        message: compraEditandoId
+          ? "Los cambios se guardaron y la compra continúa en borrador."
+          : "La compra todavía no afecta el inventario. Revísala y confírmala cuando esté completa.",
       });
       form.reset();
-      setCantidad(1);
-      setFormularioCompraAbierto(false);
-      await client.invalidateQueries({ queryKey: ["purchases"] });
+      const idActualizado = compraEditandoId;
+      cerrarFormulario();
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["purchases"] }),
+        ...(idActualizado ? [client.invalidateQueries({ queryKey: ["purchase-detail", idActualizado] })] : []),
+      ]);
     } catch (error) {
       notify({
         tone: "error",
-        title: "No se guardó la compra",
+        title: compraEditandoId ? "No se actualizó la compra" : "No se guardó la compra",
         message:
           error instanceof Error
             ? error.message
             : "Ocurrió un error inesperado.",
       });
+    }
+  };
+
+  const anular = async (compra: Compra) => {
+    if (compra.estado !== "Borrador") return;
+    if (!(await requestConfirmation({
+      title: "Anular compra",
+      message: `La compra ${compra.codigo} permanecerá registrada para trazabilidad, pero ya no podrá confirmarse ni editarse. Esta operación no afecta el inventario porque la compra todavía está en borrador.`,
+      confirmLabel: "Anular compra",
+      cancelLabel: "Volver",
+    }))) return;
+    try {
+      await api(`/compras-ganado/${compra.id}/anular`, { method: "POST" });
+      notify({ tone: "success", title: "Compra anulada", message: "La compra quedó cancelada sin afectar el inventario." });
+      if (compraDetalleId === compra.id) setCompraDetalleId(null);
+      if (compraEditandoId === compra.id) cerrarFormulario();
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["purchases"] }),
+        client.invalidateQueries({ queryKey: ["purchase-detail", compra.id] }),
+      ]);
+    } catch (error) {
+      notify({ tone: "error", title: "No se anuló la compra", message: error instanceof Error ? error.message : "Ocurrió un error inesperado." });
     }
   };
 
@@ -147,20 +234,20 @@ export function ComprasGanadoPagina() {
         eyebrow="Entradas"
         title="Compras de ganado"
         description="Registra la compra como borrador. Los bovinos ingresan al inventario únicamente al confirmarla."
-        actions={<Button type="button" onClick={() => { setCompraDetalleId(null); setFormularioCompraAbierto(true); }}><Plus size={17}/>Nueva compra</Button>}
+        actions={<Button type="button" onClick={abrirNuevaCompra}><Plus size={17}/>Nueva compra</Button>}
       />
       {formularioCompraAbierto && <Card>
-        <div className="mb-4 flex items-start justify-between gap-3"><h2 className="font-display text-lg font-bold">Nueva compra de ganado</h2><IconButton label="Cerrar nueva compra" onClick={() => { setFormularioCompraAbierto(false); setCantidad(1); }}><X size={18}/></IconButton></div>
-        <form onSubmit={(event) => void submit(event)} className="grid gap-4">
+        <div className="mb-4 flex items-start justify-between gap-3"><h2 className="font-display text-lg font-bold">{detalleEdicion ? `Editar · ${detalleEdicion.codigo} · ${detalleEdicion.nombre}` : "Nueva compra de ganado"}</h2><IconButton label={detalleEdicion ? "Cancelar edición" : "Cerrar nueva compra"} onClick={cerrarFormulario}><X size={18}/></IconButton></div>
+        <form key={compraEditandoId ?? "nueva"} onSubmit={(event) => void submit(event)} className="grid gap-4">
           <div className="grid gap-4 md:grid-cols-3">
             <Input
               name="fecha"
               label="Fecha de compra"
               type="date"
               required
-              defaultValue={new Date().toISOString().slice(0, 10)}
+              defaultValue={normalizarFechaCompraFormulario(detalleEdicion?.fechaCompra) || new Date().toISOString().slice(0, 10)}
             />
-            <Select name="comprador" label="Entidad adquirente" required>
+            <Select name="comprador" label="Entidad adquirente" required defaultValue={detalleEdicion?.propietarioAdquirenteId ?? ""}>
               <option value="">Seleccionar…</option>
               {entidadesOrdenadas.map((x) => (
                 <option key={x.id} value={x.id}>
@@ -168,7 +255,7 @@ export function ComprasGanadoPagina() {
                 </option>
               ))}
             </Select>
-            <Select name="vendedor" label="Entidad vendedora">
+            <Select name="vendedor" label="Entidad vendedora" defaultValue={detalleEdicion?.vendedorId ?? ""}>
               <option value="">No especificada</option>
               {entidadesOrdenadas.map((x) => (
                 <option key={x.id} value={x.id}>
@@ -176,8 +263,8 @@ export function ComprasGanadoPagina() {
                 </option>
               ))}
             </Select>
-            <Input name="nombre" label="Nombre de la compra" required />
-            <Input name="documento" label="Factura o documento" />
+            <Input name="nombre" label="Nombre de la compra" required defaultValue={detalleEdicion?.nombre ?? ""} />
+            <Input name="documento" label="Factura o documento" defaultValue={detalleEdicion?.documento ?? ""} />
             <Input
               label="Cantidad de bovinos"
               type="number"
@@ -185,7 +272,7 @@ export function ComprasGanadoPagina() {
               max="100"
               required
               value={cantidad}
-              onChange={(e) => setCantidad(Math.max(1, Math.min(100, Number(e.target.value))))}
+              onChange={(e) => cambiarCantidad(Number(e.target.value))}
             />
             <Input
               name="precio"
@@ -194,6 +281,7 @@ export function ComprasGanadoPagina() {
               min="0"
               step="0.01"
               required
+              defaultValue={detalleEdicion?.precioCompraOriginal}
             />
             <Input
               name="transporte"
@@ -201,6 +289,7 @@ export function ComprasGanadoPagina() {
               type="number"
               min="0"
               step="0.01"
+              defaultValue={detalleEdicion?.gastosTransporte}
             />
             <Input
               name="veterinarios"
@@ -208,6 +297,7 @@ export function ComprasGanadoPagina() {
               type="number"
               min="0"
               step="0.01"
+              defaultValue={detalleEdicion?.gastosVeterinariosIniciales}
             />
             <Input
               name="otros"
@@ -215,11 +305,13 @@ export function ComprasGanadoPagina() {
               type="number"
               min="0"
               step="0.01"
+              defaultValue={detalleEdicion?.otrosGastos}
             />
             <Input
               name="observaciones"
               label="Observaciones"
               className="md:col-span-2"
+              defaultValue={detalleEdicion?.observaciones ?? ""}
             />
           </div>
           <div className="overflow-x-auto">
@@ -250,14 +342,16 @@ export function ComprasGanadoPagina() {
                   >
                     <td className="p-2 font-semibold">{index + 1}</td>
                     <td className="p-2">
-                      <Select name={`sexo-${index}`} required defaultValue="" aria-label={`Sexo del bovino ${index + 1}`} className="min-h-10 rounded-lg py-0"><option value="">Seleccionar…</option>{OPCIONES_SEXO_ANIMAL.map((opcion) => <option key={opcion.value} value={opcion.value}>{opcion.label}</option>)}</Select>
+                      <Select name={`sexo-${index}`} required value={filasAnimales[index]?.sexo ?? ""} onChange={(event) => actualizarFila(index, { sexo: event.target.value })} aria-label={`Sexo del bovino ${index + 1}`} className="min-h-10 rounded-lg py-0"><option value="">Seleccionar…</option>{OPCIONES_SEXO_ANIMAL.map((opcion) => <option key={opcion.value} value={opcion.value}>{opcion.label}</option>)}</Select>
                     </td>
                     <td className="p-2">
-                      <Select name={`categoria-${index}`} required defaultValue="" aria-label={`Categoría del bovino ${index + 1}`} className="min-h-10 rounded-lg py-0"><option value="">Seleccionar…</option>{OPCIONES_CATEGORIA_ZOOTECNICA.map((opcion) => <option key={opcion.value} value={opcion.value}>{opcion.label}</option>)}</Select>
+                      <Select name={`categoria-${index}`} required value={filasAnimales[index]?.categoria ?? ""} onChange={(event) => actualizarFila(index, { categoria: event.target.value })} aria-label={`Categoría del bovino ${index + 1}`} className="min-h-10 rounded-lg py-0"><option value="">Seleccionar…</option>{OPCIONES_CATEGORIA_ZOOTECNICA.map((opcion) => <option key={opcion.value} value={opcion.value}>{opcion.label}</option>)}</Select>
                     </td>
                     <td className="p-2">
                       <input
                         name={`arete-${index}`}
+                        value={filasAnimales[index]?.arete ?? ""}
+                        onChange={(event) => actualizarFila(index, { arete: event.target.value })}
                         className="w-28 rounded-lg border bg-transparent p-2"
                       />
                     </td>
@@ -265,14 +359,16 @@ export function ComprasGanadoPagina() {
                       <input
                         name={`nacimiento-${index}`}
                         type="date"
+                        value={filasAnimales[index]?.fechaNacimiento ?? ""}
+                        onChange={(event) => actualizarFila(index, { fechaNacimiento: event.target.value })}
                         className="rounded-lg border bg-transparent p-2"
                       />
                     </td>
                     <td className="p-2">
-                      <Select name={`raza-${index}`} defaultValue="" aria-label={`Raza del bovino ${index + 1}`} className="min-h-10 rounded-lg py-0"><option value="">No especificada</option>{breeds.data?.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}</Select>
+                      <Select name={`raza-${index}`} value={filasAnimales[index]?.razaId ?? ""} onChange={(event) => actualizarFila(index, { razaId: event.target.value })} aria-label={`Raza del bovino ${index + 1}`} className="min-h-10 rounded-lg py-0"><option value="">No especificada</option>{breeds.data?.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}</Select>
                     </td>
                     <td className="p-2">
-                      <Select name={`color-${index}`} defaultValue="" aria-label={`Color del bovino ${index + 1}`} className="min-h-10 rounded-lg py-0"><option value="">No especificado</option>{colors.data?.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}</Select>
+                      <Select name={`color-${index}`} value={filasAnimales[index]?.colorId ?? ""} onChange={(event) => actualizarFila(index, { colorId: event.target.value })} aria-label={`Color del bovino ${index + 1}`} className="min-h-10 rounded-lg py-0"><option value="">No especificado</option>{colors.data?.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}</Select>
                     </td>
                     <td className="p-2">
                       <input
@@ -280,6 +376,8 @@ export function ComprasGanadoPagina() {
                         type="number"
                         min="0"
                         step="0.01"
+                        value={filasAnimales[index]?.precioIndividual ?? ""}
+                        onChange={(event) => actualizarFila(index, { precioIndividual: event.target.value })}
                         className="w-32 rounded-lg border bg-transparent p-2"
                       />
                     </td>
@@ -289,7 +387,7 @@ export function ComprasGanadoPagina() {
             </table>
           </div>
           <div>
-            <Button type="submit">Guardar borrador</Button>
+            <Button type="submit">{compraEditandoId ? "Guardar cambios" : "Guardar borrador"}</Button>
           </div>
         </form>
       </Card>}
@@ -317,14 +415,11 @@ export function ComprasGanadoPagina() {
                 </p>
                 <IconButton label={`Ver detalle de compra ${item.codigo}`} onClick={() => setCompraDetalleId(item.id)}><Eye size={19} /></IconButton>
                 {item.estado === "Borrador" && (
-                  <button
-                    type="button"
-                    onClick={() => void confirmar(item)}
-                    title="Confirmar compra"
-                    className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-500"
-                  >
-                    <CheckCircle2 size={20} />
-                  </button>
+                  <>
+                    <IconButton tone="edit" label={`Editar compra ${item.codigo}`} onClick={() => void editarCompra(item)}><Pencil size={19} /></IconButton>
+                    <IconButton tone="danger" label={`Anular compra ${item.codigo}`} onClick={() => void anular(item)}><Ban size={19} /></IconButton>
+                    <IconButton tone="success" label={`Confirmar compra ${item.codigo}`} onClick={() => void confirmar(item)}><CheckCircle2 size={20} /></IconButton>
+                  </>
                 )}
               </div>
             </div>
