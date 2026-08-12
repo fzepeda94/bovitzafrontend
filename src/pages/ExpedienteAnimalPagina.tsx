@@ -12,7 +12,8 @@ import {
 import { api } from "../lib/api";
 import { notify, requestConfirmation } from "../lib/feedback";
 import { formatearMoneda, useMonedaTenant } from "../lib/moneda";
-import type { Animal, AnimalRecord, CatalogItem, InventoryMovement, PagedResult } from "../types";
+import { endpointAntecedentesReproductivos, MENSAJE_ANTECEDENTE_REPRODUCTIVO } from "../lib/antecedentesReproductivos";
+import type { Animal, AnimalRecord, CatalogItem, HistoricalBirthRecord, InventoryMovement, PagedResult } from "../types";
 import { Badge, Button, Card, Input, Select } from "../components/ui";
 import { PageHeader } from "../components/Page";
 
@@ -66,6 +67,7 @@ export function AnimalDetailPage() {
   const [action, setAction] = useState<"parto" | "baja" | null>(null);
   const [message, setMessage] = useState("");
   const [numeroCrias, setNumeroCrias] = useState(1);
+  const [antecedenteAbierto, setAntecedenteAbierto] = useState(false);
   const [desteteAbierto, setDesteteAbierto] = useState(false);
   const [busquedaPadre, setBusquedaPadre] = useState("");
   const client = useQueryClient();
@@ -88,6 +90,11 @@ export function AnimalDetailPage() {
   const tiposPartoQuery = useQuery({
     queryKey: ["catalog", "tipos-parto"],
     queryFn: () => api<CatalogItem[]>("/catalogos/tipos-parto"),
+  });
+  const antecedentesQuery = useQuery({
+    queryKey: ["animal-historical-births", id],
+    queryFn: () => api<HistoricalBirthRecord[]>(endpointAntecedentesReproductivos(id)),
+    enabled: !!id,
   });
   const padresQuery = useQuery({
     queryKey: ["animals", "possible-fathers", busquedaPadre],
@@ -238,6 +245,28 @@ export function AnimalDetailPage() {
             : "Ocurrió un error inesperado.",
       });
     }
+  };
+
+  const guardarAntecedente = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const crias = Array.from({ length: numeroCrias }, (_, index) => ({
+      sexo: data.get(`sexoHistorico-${index}`),
+      nacioViva: data.get(`vivaHistorica-${index}`) === "on",
+      observaciones: data.get(`observacionHistorica-${index}`) || null,
+    }));
+    await api(endpointAntecedentesReproductivos(id), {
+      method: "POST",
+      body: JSON.stringify({
+        fecha: data.get("fechaHistorica"), tipoPartoId: data.get("tipoPartoHistoricoId") || null,
+        numeroCrias, criasVivas: crias.filter(x => x.nacioViva).length,
+        criasMuertas: crias.filter(x => !x.nacioViva).length,
+        fuente: data.get("fuente") || null, observaciones: data.get("observacionesHistoricas") || null, crias,
+      }),
+    });
+    setAntecedenteAbierto(false);
+    notify({ tone: "success", title: "Antecedente registrado", message: "Se documentó el antecedente sin modificar el inventario." });
+    await Promise.all([antecedentesQuery.refetch(), client.invalidateQueries({ queryKey: ["animal", id] })]);
   };
   const guardarDestete = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -409,10 +438,13 @@ export function AnimalDetailPage() {
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-lg font-bold">{tab}</h2>
           <div className="flex flex-wrap gap-2">
-            {animal.sexo === "Hembra" && (
+            {animal.sexo === "Hembra" && (animal.categoria === "Novilla" || animal.categoria === "Vaca") && (
               <Button variant="secondary" onClick={() => setAction("parto")}>
                 Registrar parto
               </Button>
+            )}
+            {tab === "Genealogía" && animal.sexo === "Hembra" && (
+              <Button variant="secondary" onClick={() => setAntecedenteAbierto(true)}>Registrar antecedente reproductivo</Button>
             )}
             {animal.estadoVida === "Activo" &&
               (animal.categoria === "Ternera" || animal.categoria === "Ternero") && (
@@ -602,6 +634,18 @@ export function AnimalDetailPage() {
             </div>
           </form>
         )}
+        {antecedenteAbierto && (
+          <form onSubmit={(event) => void guardarAntecedente(event)} className="mb-6 grid gap-4 rounded-xl border border-amber-300 bg-amber-50 p-4 md:grid-cols-2 dark:border-amber-800 dark:bg-amber-950/30">
+            <div className="md:col-span-2"><h3 className="font-semibold">Antecedente reproductivo previo</h3><p className="mt-1 text-sm text-amber-800 dark:text-amber-200">{MENSAJE_ANTECEDENTE_REPRODUCTIVO}</p></div>
+            <Input name="fechaHistorica" label="Fecha *" type="date" required max={animal.fechaIncorporacion?.slice(0, 10)} />
+            <Select name="tipoPartoHistoricoId" label="Tipo de parto"><option value="">No especificado</option>{tiposPartoQuery.data?.map(tipo => <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>)}</Select>
+            <Input label="Número de crías *" type="number" min="1" max="4" value={numeroCrias} onChange={event => setNumeroCrias(Math.max(1, Math.min(4, Number(event.target.value))))} />
+            <Input name="fuente" label="Fuente" placeholder="Información proporcionada por propietario anterior" />
+            <div className="grid gap-3 md:col-span-2">{Array.from({ length: numeroCrias }, (_, index) => <div key={index} className="grid gap-3 rounded-xl bg-white p-3 sm:grid-cols-3 dark:bg-slate-900"><Select name={`sexoHistorico-${index}`} label={`Cría ${index + 1} · sexo`}><option>Hembra</option><option>Macho</option><option>Desconocido</option></Select><label className="flex items-center gap-2 pt-7 text-sm"><input name={`vivaHistorica-${index}`} type="checkbox" defaultChecked /> Nació viva</label><Input name={`observacionHistorica-${index}`} label="Observaciones" /></div>)}</div>
+            <Input name="observacionesHistoricas" label="Observaciones generales" className="md:col-span-2" />
+            <div className="flex gap-2 md:col-span-2"><Button type="submit">Registrar antecedente</Button><Button type="button" variant="ghost" onClick={() => setAntecedenteAbierto(false)}>Cancelar</Button></div>
+          </form>
+        )}
         {tab === "Resumen" && (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <Field label="Arete">{animal.arete ?? "Sin arete"}</Field>
@@ -689,7 +733,7 @@ export function AnimalDetailPage() {
                   : "No registrado"}
               </Field>
             </div>
-            <h3 className="font-semibold">Historial de partos</h3>
+            <h3 className="font-semibold">Partos registrados en BovItzá</h3>
             {record?.partos.map((x) => (
               <div key={x.id} className="flex items-center gap-3">
                 <div className="flex-1">
@@ -706,8 +750,11 @@ export function AnimalDetailPage() {
               </div>
             ))}
             {record?.partos.length === 0 && (
-              <Empty>Esta hembra no tiene partos registrados.</Empty>
+              <Empty>Esta hembra no tiene partos operativos registrados.</Empty>
             )}
+            <h3 className="font-semibold">Antecedentes reproductivos previos</h3>
+            {antecedentesQuery.data?.map(antecedente => <Field key={antecedente.id} label={date(antecedente.fecha)}>{antecedente.numeroCrias} cría(s): {antecedente.criasVivas} viva(s), {antecedente.criasMuertas} muerta(s) · Sexo(s): {antecedente.crias.map(cria => cria.sexo).join(", ") || "Desconocido"}{antecedente.fuente ? ` · Fuente: ${antecedente.fuente}` : ""}{antecedente.observaciones ? ` · ${antecedente.observaciones}` : ""}</Field>)}
+            {antecedentesQuery.data?.length === 0 && <Empty>Sin antecedentes reproductivos previos.</Empty>}
             <h3 className="font-semibold">Destete</h3>
             {record?.destetes.map((x) => (
               <div key={x.id} className="flex items-center gap-3">
