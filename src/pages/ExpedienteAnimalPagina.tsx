@@ -249,24 +249,28 @@ export function AnimalDetailPage() {
 
   const guardarAntecedente = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const crias = Array.from({ length: numeroCrias }, (_, index) => ({
-      sexo: data.get(`sexoHistorico-${index}`),
-      nacioViva: data.get(`vivaHistorica-${index}`) === "on",
-      observaciones: data.get(`observacionHistorica-${index}`) || null,
-    }));
-    await api(endpointAntecedentesReproductivos(id), {
-      method: "POST",
-      body: JSON.stringify({
-        fecha: data.get("fechaHistorica"), tipoPartoId: data.get("tipoPartoHistoricoId") || null,
-        numeroCrias, criasVivas: crias.filter(x => x.nacioViva).length,
-        criasMuertas: crias.filter(x => !x.nacioViva).length,
-        fuente: data.get("fuente") || null, observaciones: data.get("observacionesHistoricas") || null, crias,
-      }),
-    });
-    setAntecedenteAbierto(false);
-    notify({ tone: "success", title: "Antecedente registrado", message: "Se documentó el antecedente sin modificar el inventario." });
-    await Promise.all([antecedentesQuery.refetch(), client.invalidateQueries({ queryKey: ["animal", id] })]);
+    try {
+      const data = new FormData(event.currentTarget);
+      const crias = Array.from({ length: numeroCrias }, (_, index) => ({
+        sexo: data.get(`sexoHistorico-${index}`),
+        nacioViva: data.get(`vivaHistorica-${index}`) === "on",
+        observaciones: data.get(`observacionHistorica-${index}`) || null,
+      }));
+      await api(endpointAntecedentesReproductivos(id), {
+        method: "POST",
+        body: JSON.stringify({
+          fecha: data.get("fechaHistorica"), tipoPartoId: data.get("tipoPartoHistoricoId") || null,
+          numeroCrias, criasVivas: crias.filter(x => x.nacioViva).length,
+          criasMuertas: crias.filter(x => !x.nacioViva).length,
+          fuente: data.get("fuente") || null, observaciones: data.get("observacionesHistoricas") || null, crias,
+        }),
+      });
+      setAntecedenteAbierto(false);
+      notify({ tone: "success", title: "Antecedente registrado", message: "Se documentó el antecedente sin modificar el inventario." });
+      await Promise.all([antecedentesQuery.refetch(), client.invalidateQueries({ queryKey: ["animal", id] })]);
+    } catch (error) {
+      notify({ tone: "error", title: "No se registró el antecedente", message: error instanceof Error ? error.message : "Ocurrió un error inesperado." });
+    }
   };
   const guardarDestete = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -443,7 +447,7 @@ export function AnimalDetailPage() {
                 Registrar parto
               </Button>
             )}
-            {tab === "Genealogía" && animal.sexo === "Hembra" && (
+            {tab === "Genealogía" && animal.sexo === "Hembra" && (animal.categoria === "Novilla" || animal.categoria === "Vaca") && (
               <Button variant="secondary" onClick={() => setAntecedenteAbierto(true)}>Registrar antecedente reproductivo</Button>
             )}
             {animal.estadoVida === "Activo" &&
