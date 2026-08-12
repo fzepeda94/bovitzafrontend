@@ -7,6 +7,8 @@ import type { CatalogItem, Entity, PagedResult } from "../types";
 import { Button, Card, Input, Select } from "../components/ui";
 import { PageHeader } from "../components/Page";
 import { formatearMoneda, useMonedaTenant } from "../lib/moneda";
+import { AppSelect } from "../components/AppSelect";
+import { OPCIONES_CATEGORIA_ZOOTECNICA, OPCIONES_SEXO_ANIMAL } from "../lib/opcionesAnimales";
 
 interface Compra {
   id: string;
@@ -19,9 +21,13 @@ interface Compra {
   estado: string;
 }
 
+interface SeleccionAnimalCompra { sexo: string; categoria: string; razaId: string; colorId: string }
+const nuevaSeleccion = (): SeleccionAnimalCompra => ({ sexo: "", categoria: "", razaId: "", colorId: "" });
+
 export function ComprasGanadoPagina() {
   const { moneda, cultura } = useMonedaTenant();
   const [cantidad, setCantidad] = useState(1);
+  const [selecciones, setSelecciones] = useState<SeleccionAnimalCompra[]>([nuevaSeleccion()]);
   const client = useQueryClient();
   const entities = useQuery({
     queryKey: ["entities"],
@@ -42,6 +48,11 @@ export function ComprasGanadoPagina() {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const filaIncompleta = selecciones.slice(0, cantidad).findIndex((fila) => !fila.sexo || !fila.categoria);
+    if (filaIncompleta >= 0) {
+      notify({ tone: "error", title: "Información incompleta", message: `El bovino #${filaIncompleta + 1} no tiene sexo o categoría seleccionada.` });
+      return;
+    }
     const form = event.currentTarget;
     const data = new FormData(form);
     const animales = Array.from({ length: cantidad }, (_, index) => ({
@@ -81,6 +92,7 @@ export function ComprasGanadoPagina() {
       });
       form.reset();
       setCantidad(1);
+      setSelecciones([nuevaSeleccion()]);
       await client.invalidateQueries({ queryKey: ["purchases"] });
     } catch (error) {
       notify({
@@ -92,6 +104,16 @@ export function ComprasGanadoPagina() {
             : "Ocurrió un error inesperado.",
       });
     }
+  };
+
+  const cambiarCantidad = (siguiente: number) => {
+    const normalizada = Math.max(1, Math.min(100, siguiente));
+    setCantidad(normalizada);
+    setSelecciones((actuales) => Array.from({ length: normalizada }, (_, index) => actuales[index] ?? nuevaSeleccion()));
+  };
+
+  const actualizarSeleccion = (index: number, cambio: Partial<SeleccionAnimalCompra>) => {
+    setSelecciones((actuales) => actuales.map((fila, filaIndex) => filaIndex === index ? { ...fila, ...cambio } : fila));
   };
 
   const confirmar = async (compra: Compra) => {
@@ -168,9 +190,7 @@ export function ComprasGanadoPagina() {
               min="1"
               max="100"
               value={cantidad}
-              onChange={(e) =>
-                setCantidad(Math.max(1, Math.min(100, Number(e.target.value))))
-              }
+              onChange={(e) => cambiarCantidad(Number(e.target.value))}
             />
             <Input
               name="precio"
@@ -235,28 +255,10 @@ export function ComprasGanadoPagina() {
                   >
                     <td className="p-2 font-semibold">{index + 1}</td>
                     <td className="p-2">
-                      <select
-                        name={`sexo-${index}`}
-                        required
-                        className="rounded-lg border bg-transparent p-2"
-                      >
-                        <option>Hembra</option>
-                        <option>Macho</option>
-                      </select>
+                      <AppSelect name={`sexo-${index}`} value={selecciones[index]?.sexo ?? ""} onChange={(sexo) => actualizarSeleccion(index, { sexo })} options={OPCIONES_SEXO_ANIMAL} placeholder="Seleccionar…" required ariaLabel={`Sexo del bovino ${index + 1}`} />
                     </td>
                     <td className="p-2">
-                      <select
-                        name={`categoria-${index}`}
-                        required
-                        className="rounded-lg border bg-transparent p-2"
-                      >
-                        <option>Vaca</option>
-                        <option>Novilla</option>
-                        <option>Ternera</option>
-                        <option>Ternero</option>
-                        <option>Novillo</option>
-                        <option>Toro</option>
-                      </select>
+                      <AppSelect name={`categoria-${index}`} value={selecciones[index]?.categoria ?? ""} onChange={(categoria) => actualizarSeleccion(index, { categoria })} options={OPCIONES_CATEGORIA_ZOOTECNICA} placeholder="Seleccionar…" required ariaLabel={`Categoría del bovino ${index + 1}`} />
                     </td>
                     <td className="p-2">
                       <input
@@ -272,30 +274,10 @@ export function ComprasGanadoPagina() {
                       />
                     </td>
                     <td className="p-2">
-                      <select
-                        name={`raza-${index}`}
-                        className="rounded-lg border bg-transparent p-2"
-                      >
-                        <option value="">No especificada</option>
-                        {breeds.data?.map((x) => (
-                          <option key={x.id} value={x.id}>
-                            {x.nombre}
-                          </option>
-                        ))}
-                      </select>
+                      <AppSelect name={`raza-${index}`} value={selecciones[index]?.razaId ?? ""} onChange={(razaId) => actualizarSeleccion(index, { razaId })} options={[{ value: "", label: "No especificada" }, ...(breeds.data ?? []).map((x) => ({ value: x.id, label: x.nombre }))]} placeholder="No especificada" ariaLabel={`Raza del bovino ${index + 1}`} />
                     </td>
                     <td className="p-2">
-                      <select
-                        name={`color-${index}`}
-                        className="rounded-lg border bg-transparent p-2"
-                      >
-                        <option value="">No especificado</option>
-                        {colors.data?.map((x) => (
-                          <option key={x.id} value={x.id}>
-                            {x.nombre}
-                          </option>
-                        ))}
-                      </select>
+                      <AppSelect name={`color-${index}`} value={selecciones[index]?.colorId ?? ""} onChange={(colorId) => actualizarSeleccion(index, { colorId })} options={[{ value: "", label: "No especificado" }, ...(colors.data ?? []).map((x) => ({ value: x.id, label: x.nombre }))]} placeholder="No especificado" ariaLabel={`Color del bovino ${index + 1}`} />
                     </td>
                     <td className="p-2">
                       <input
