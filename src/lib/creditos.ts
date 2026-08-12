@@ -1,6 +1,7 @@
 export const calcularCostoFinanciero = (principal: number, totalContractual: number) => totalContractual - principal
 export const calcularPrincipalDisponible = (principal: number, aplicado: number) => principal - aplicado
 export const calcularMaximoFinanciable = (disponibleCredito: number, disponibleCompra: number) => Math.min(disponibleCredito, disponibleCompra)
+export const normalizarFechaFormulario = (fecha: string | null | undefined) => fecha?.slice(0, 10) ?? ''
 export const endpointsCredito = {
   crear: '/creditos', detalle: (id: string) => `/creditos/${id}`, confirmar: (id: string) => `/creditos/${id}/confirmar`,
   anular: (id: string) => `/creditos/${id}/anular`, financiamientos: (id: string) => `/creditos/${id}/financiamientos`,
