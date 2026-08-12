@@ -1,12 +1,12 @@
-import type { AppSelectOption } from "../components/AppSelect";
+export interface OpcionAnimal { value: string; label: string }
 
-export const OPCIONES_SEXO_ANIMAL: AppSelectOption[] = [
+export const OPCIONES_SEXO_ANIMAL: OpcionAnimal[] = [
   { value: "Hembra", label: "Hembra" },
   { value: "Macho", label: "Macho" },
   { value: "Desconocido", label: "Desconocido" },
 ];
 
-export const OPCIONES_CATEGORIA_ZOOTECNICA: AppSelectOption[] = [
+export const OPCIONES_CATEGORIA_ZOOTECNICA: OpcionAnimal[] = [
   { value: "Ternera", label: "Ternera" },
   { value: "Novilla", label: "Novilla" },
   { value: "Vaca", label: "Vaca" },
