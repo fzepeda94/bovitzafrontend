@@ -39,6 +39,7 @@ import {
   type ColumnaExportacion,
 } from '../components/ModalExportacion'
 import { PageHeader } from '../components/Page'
+import { ordenarPorCodigo } from '../lib/ordenarPorCodigo'
 
 type FarmWithStatus = Farm & {
   activo?: boolean
@@ -246,8 +247,7 @@ export function PasturesPage() {
     },
   })
 
-  const farmItems =
-    farms.data?.items ?? []
+  const farmItems = useMemo(() => ordenarPorCodigo(farms.data?.items ?? []), [farms.data?.items])
 
   const activeFarms =
     farmItems.filter(
@@ -255,8 +255,7 @@ export function PasturesPage() {
         farm.activo !== false,
     )
 
-  const pastureItems =
-    pastures.data?.items ?? []
+  const pastureItems = useMemo(() => ordenarPorCodigo(pastures.data?.items ?? []), [pastures.data?.items])
 
   const destinationItems =
     destinations.data ?? []

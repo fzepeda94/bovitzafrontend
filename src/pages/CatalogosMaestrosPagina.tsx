@@ -11,10 +11,12 @@ import {
 import { useParams } from 'react-router-dom'
 import {
   Download,
+  Plus,
   Pencil,
   Power,
   RotateCcw,
   Search,
+  X,
 } from 'lucide-react'
 
 import { api } from '../lib/api'
@@ -33,6 +35,7 @@ import {
   type ColumnaExportacion,
 } from '../components/ModalExportacion'
 import { PageHeader } from '../components/Page'
+import { ordenarPorCodigo } from '../lib/ordenarPorCodigo'
 
 const configuracion = {
   'tipos-entidad': {
@@ -40,9 +43,11 @@ const configuracion = {
     singular: 'tipo de entidad',
     descripcion:
       'Clasificaciones utilizadas para identificar la naturaleza de personas, empresas, asociaciones, proveedores y demás entidades.',
+    accionNuevo: 'Nuevo tipo de entidad',
   },
 
   paises: {
+    accionNuevo: 'Nuevo país',
     titulo: 'Países',
     singular: 'país',
     descripcion:
@@ -50,6 +55,7 @@ const configuracion = {
   },
 
   departamentos: {
+    accionNuevo: 'Nuevo departamento',
     titulo: 'Departamentos',
     singular: 'departamento',
     padre: 'paises',
@@ -59,6 +65,7 @@ const configuracion = {
   },
 
   municipios: {
+    accionNuevo: 'Nuevo municipio',
     titulo: 'Municipios',
     singular: 'municipio',
     padre: 'departamentos',
@@ -68,6 +75,7 @@ const configuracion = {
   },
 
   'unidades-medida': {
+    accionNuevo: 'Nueva unidad de medida',
     titulo: 'Unidades de medida',
     singular: 'unidad de medida',
     descripcion:
@@ -75,6 +83,7 @@ const configuracion = {
   },
 
   'destinos-productivos': {
+    accionNuevo: 'Nuevo destino productivo',
     titulo: 'Destinos productivos',
     singular: 'destino productivo',
     descripcion:
@@ -82,6 +91,7 @@ const configuracion = {
   },
 
   razas: {
+    accionNuevo: 'Nueva raza',
     titulo: 'Razas',
     singular: 'raza',
     descripcion:
@@ -89,6 +99,7 @@ const configuracion = {
   },
 
   colores: {
+    accionNuevo: 'Nuevo color',
     titulo: 'Colores',
     singular: 'color',
     descripcion:
@@ -96,6 +107,7 @@ const configuracion = {
   },
 
   'tipos-parto': {
+    accionNuevo: 'Nuevo tipo de parto',
     titulo: 'Tipos de parto',
     singular: 'tipo de parto',
     descripcion:
@@ -126,8 +138,8 @@ export function CatalogosMaestrosPagina() {
   const [
     editing,
     setEditing,
-  ] = useState<CatalogItem | null>(
-    null,
+  ] = useState<CatalogItem | null | undefined>(
+    undefined,
   )
 
   const [search, setSearch] =
@@ -212,8 +224,8 @@ export function CatalogosMaestrosPagina() {
       [parents.data],
     )
 
-  const items =
-    query.data ?? []
+  const items = useMemo(() => ordenarPorCodigo(query.data ?? []), [query.data])
+  const parentItems = useMemo(() => ordenarPorCodigo(parents.data ?? []), [parents.data])
 
   const filteredItems =
     useMemo(() => {
@@ -345,7 +357,7 @@ export function CatalogosMaestrosPagina() {
 
   useEffect(() => {
     setPage(1)
-    setEditing(null)
+    setEditing(undefined)
     setSearch('')
   }, [
     tipo,
@@ -408,7 +420,7 @@ export function CatalogosMaestrosPagina() {
         },
       )
 
-      setEditing(null)
+      setEditing(undefined)
       form.reset()
 
       await client
@@ -440,7 +452,7 @@ export function CatalogosMaestrosPagina() {
       if (
         editing?.id === item.id
       ) {
-        setEditing(null)
+        setEditing(undefined)
       }
 
       await client
@@ -462,7 +474,7 @@ export function CatalogosMaestrosPagina() {
         description={
           cfg.descripcion
         }
-        actions={
+        actions={<div className="flex flex-wrap gap-2">
           <Button
             type="button"
             variant="secondary"
@@ -479,17 +491,15 @@ export function CatalogosMaestrosPagina() {
             <Download size={17} />
             Exportar
           </Button>
-        }
+          <Button type="button" onClick={() => setEditing(null)}><Plus size={17}/>{cfg.accionNuevo}</Button>
+        </div>}
       />
 
-      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
-        <Card>
-          <h2 className="font-display text-lg font-bold">
-            {editing
-              ? 'Editar'
-              : 'Nuevo'}{' '}
-            {cfg.singular}
-          </h2>
+      <div className="grid gap-5">
+        {editing !== undefined && <Card>
+          <div className="flex items-start justify-between gap-3"><h2 className="font-display text-lg font-bold">
+            {editing ? `Editar ${cfg.singular} ${editing.codigo}` : cfg.accionNuevo}
+          </h2><IconButton label="Cerrar formulario" onClick={() => setEditing(undefined)}><X size={18}/></IconButton></div>
 
           <form
             key={
@@ -537,13 +547,13 @@ export function CatalogosMaestrosPagina() {
                   Seleccionar…
                 </option>
 
-                {parents.data?.map(
+                {parentItems.map(
                   item => (
                     <option
                       key={item.id}
                       value={item.id}
                     >
-                      {item.nombre}
+                      {item.codigo} · {item.nombre}
                     </option>
                   ),
                 )}
@@ -567,20 +577,10 @@ export function CatalogosMaestrosPagina() {
                   : 'Guardar'}
               </Button>
 
-              {editing && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() =>
-                    setEditing(null)
-                  }
-                >
-                  Cancelar
-                </Button>
-              )}
+              <Button type="button" variant="ghost" onClick={() => setEditing(undefined)}>Cancelar</Button>
             </div>
           </form>
-        </Card>
+        </Card>}
 
         <div className="grid content-start gap-4">
           <Card className="!p-3">
