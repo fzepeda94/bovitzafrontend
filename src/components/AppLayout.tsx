@@ -172,6 +172,16 @@ const agricolaNavigation: NavigationItem[] = [
 
 const financeNavigation: NavigationItem[] = [
   {
+    to: '/finanzas/movimientos',
+    label: 'Movimientos financieros',
+    icon: CircleDollarSign,
+  },
+  {
+    to: '/finanzas/categorias',
+    label: 'Categorías financieras',
+    icon: CircleDollarSign,
+  },
+  {
     to: '/finanzas/compras-ganado',
     label: 'Compras de ganado',
     icon: CircleDollarSign,
