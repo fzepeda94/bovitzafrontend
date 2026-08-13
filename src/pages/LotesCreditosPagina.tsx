@@ -58,7 +58,15 @@ interface Financing {
   montoFinanciado: number;
   observaciones: string | null;
 }
-interface DestinoCredito { id:string; fecha:string; descripcion:string; monto:number; ambito:string; observaciones:string|null }
+interface DestinoCredito {
+  id: string;
+  fecha: string;
+  descripcion: string;
+  monto: number;
+  ambito: string;
+  observaciones: string | null;
+}
+interface CategoriaFinancieraOpcion {id:string;codigo:string;nombre:string;naturaleza:string}
 
 export function LotsPage() {
   const { moneda, cultura } = useMonedaTenant();
@@ -99,7 +107,12 @@ export function LotsPage() {
       api<Financing[]>(endpointsCredito.financiamientos(aplicando!.id)),
     enabled: !!aplicando,
   });
-  const destinos = useQuery({ queryKey:["credit-destinations",aplicando?.id], queryFn:()=>api<DestinoCredito[]>(`/creditos/${aplicando!.id}/destinos`), enabled:!!aplicando });
+  const destinos = useQuery({
+    queryKey: ["credit-destinations", aplicando?.id],
+    queryFn: () => api<DestinoCredito[]>(`/creditos/${aplicando!.id}/destinos`),
+    enabled: !!aplicando,
+  });
+  const categoriasFinancieras=useQuery({queryKey:["financial-categories"],queryFn:()=>api<CategoriaFinancieraOpcion[]>("/finanzas/categorias")});
   const comprasDisponibles = useMemo(
     () =>
       (lots.data ?? []).filter(
@@ -256,9 +269,40 @@ export function LotsPage() {
     }
   };
   const guardarDestino = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); if (!aplicando) return; const form=event.currentTarget; const data=new FormData(form);
-    try { await api(`/creditos/${aplicando.id}/destinos`,{method:"POST",body:JSON.stringify({fecha:data.get("fecha"),descripcion:data.get("descripcion"),monto:Number(data.get("monto")),ambito:data.get("ambito"),categoriaFinancieraId:null,observaciones:data.get("observaciones")||null})}); form.reset(); setRegistrandoDestino(false); notify({tone:"success",title:"Destino registrado",message:"El principal quedó asignado sin alterar costos del ganado."}); await Promise.all([client.invalidateQueries({queryKey:["credits"]}),destinos.refetch()]); }
-    catch(error){notify({tone:"error",title:"No se registró el destino",message:error instanceof Error?error.message:"Ocurrió un error."})}
+    event.preventDefault();
+    if (!aplicando) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    try {
+      await api(`/creditos/${aplicando.id}/destinos`, {
+        method: "POST",
+        body: JSON.stringify({
+          fecha: data.get("fecha"),
+          descripcion: data.get("descripcion"),
+          monto: Number(data.get("monto")),
+          ambito: data.get("ambito"),
+          categoriaFinancieraId: data.get("categoriaFinancieraId") || null,
+          observaciones: data.get("observaciones") || null,
+        }),
+      });
+      form.reset();
+      setRegistrandoDestino(false);
+      notify({
+        tone: "success",
+        title: "Destino registrado",
+        message: "El principal quedó asignado sin alterar costos del ganado.",
+      });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["credits"] }),
+        destinos.refetch(),
+      ]);
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "No se registró el destino",
+        message: error instanceof Error ? error.message : "Ocurrió un error.",
+      });
+    }
   };
   const quitar = async (id: string) => {
     if (
@@ -492,7 +536,7 @@ export function LotsPage() {
                 )}
                 {c.estado === "Vigente" && (
                   <Button onClick={() => setCreditoAplicandoId(c.id)}>
-                    Aplicar a compra
+                    Aplicaciones del principal
                   </Button>
                 )}
               </div>
@@ -512,7 +556,11 @@ export function LotsPage() {
               />
               <Metric
                 label="Otros destinos"
-                value={formatearMoneda(c.montoAplicadoOtrosDestinos, moneda, cultura)}
+                value={formatearMoneda(
+                  c.montoAplicadoOtrosDestinos,
+                  moneda,
+                  cultura,
+                )}
               />
               <Metric
                 label="Principal asignado"
@@ -559,7 +607,8 @@ export function LotsPage() {
             {aplicando.numeroCredito || aplicando.id.slice(0, 8)}
           </h2>
           <p className="mt-1 text-sm">
-            Principal sin asignar: {formatearMoneda(aplicando.principalSinAsignar, moneda, cultura)}
+            Principal sin asignar:{" "}
+            {formatearMoneda(aplicando.principalSinAsignar, moneda, cultura)}
           </p>
           <form
             key={financiamientoEditando?.id ?? "nuevo"}
@@ -626,7 +675,12 @@ export function LotsPage() {
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => { setAplicando(null); setCompraSeleccionada(""); setFinanciamientoEditando(null); setRegistrandoDestino(false); }}
+                onClick={() => {
+                  setAplicando(null);
+                  setCompraSeleccionada("");
+                  setFinanciamientoEditando(null);
+                  setRegistrandoDestino(false);
+                }}
               >
                 Cerrar
               </Button>
@@ -662,9 +716,76 @@ export function LotsPage() {
             ))}
           </div>
           <div className="mt-6 border-t border-slate-200 pt-5 dark:border-slate-700">
-            <div className="flex items-center justify-between gap-3"><h3 className="font-semibold">Otros destinos</h3><Button type="button" variant="secondary" onClick={()=>setRegistrandoDestino(true)}>Registrar destino</Button></div>
-            {registrandoDestino&&<form onSubmit={guardarDestino} className="mt-4 grid min-w-0 gap-4 md:grid-cols-2 [&>*]:min-w-0 [&>*]:w-full"><Input name="fecha" label="Fecha *" type="date" required defaultValue={new Date().toISOString().slice(0,10)}/><Input name="descripcion" label="Descripción *" required/><Input name="monto" label={`Monto * (${moneda})`} type="number" min="0.0001" step="0.0001" required/><Select name="ambito" label="Ámbito *" required defaultValue="Ganadero"><option value="Ganadero">Ganadero</option><option value="ExternoNoGanadero">Externo no ganadero</option></Select><Input name="observaciones" label="Observaciones"/><div className="flex gap-2"><Button type="submit">Guardar destino</Button><Button type="button" variant="ghost" onClick={()=>setRegistrandoDestino(false)}>Cancelar</Button></div></form>}
-            <div className="mt-4 grid gap-2">{destinos.data?.map(x=><div key={x.id} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800"><b>{x.descripcion} · {formatearMoneda(x.monto,moneda,cultura)}</b><p className="text-xs text-slate-500">{x.fecha.slice(0,10)} · {x.ambito}</p></div>)}</div>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-semibold">Otros destinos</h3>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setRegistrandoDestino(true)}
+              >
+                Registrar destino
+              </Button>
+            </div>
+            {registrandoDestino && (
+              <form
+                onSubmit={guardarDestino}
+                className="mt-4 grid min-w-0 gap-4 md:grid-cols-2 [&>*]:min-w-0 [&>*]:w-full"
+              >
+                <Input
+                  name="fecha"
+                  label="Fecha *"
+                  type="date"
+                  required
+                  defaultValue={new Date().toISOString().slice(0, 10)}
+                />
+                <Input name="descripcion" label="Descripción *" required />
+                <Input
+                  name="monto"
+                  label={`Monto * (${moneda})`}
+                  type="number"
+                  min="0.0001"
+                  step="0.0001"
+                  required
+                />
+                <Select
+                  name="ambito"
+                  label="Ámbito *"
+                  required
+                  defaultValue="Ganadero"
+                >
+                  <option value="Ganadero">Ganadero</option>
+                  <option value="ExternoNoGanadero">Externo no ganadero</option>
+                </Select>
+                <Select name="categoriaFinancieraId" label="Categoría financiera"><option value="">Sin categoría</option>{categoriasFinancieras.data?.map(x=><option key={x.id} value={x.id}>{x.codigo} · {x.nombre}</option>)}</Select>
+                <Input name="observaciones" label="Observaciones" />
+                <div className="flex gap-2">
+                  <Button type="submit">Guardar destino</Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setRegistrandoDestino(false)}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            )}
+            <div className="mt-4 grid gap-2">
+              {destinos.data?.map((x) => (
+                <div
+                  key={x.id}
+                  className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800"
+                >
+                  <b>
+                    {x.descripcion} ·{" "}
+                    {formatearMoneda(x.monto, moneda, cultura)}
+                  </b>
+                  <p className="text-xs text-slate-500">
+                    {x.fecha.slice(0, 10)} · {x.ambito}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         </Card>
       )}
