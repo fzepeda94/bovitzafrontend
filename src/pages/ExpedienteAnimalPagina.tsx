@@ -789,6 +789,9 @@ export function AnimalDetailPage() {
                 {x.principioActivo || "Producto no especificado"}
                 {x.dosis ? ` · ${x.dosis} ${x.unidad ?? ""}` : ""}
                 {x.via ? ` · vía ${x.via}` : ""}
+                {x.costoTotal ? ` · costo ${formatearMoneda(x.costoTotal, moneda, cultura)}` : ""}
+                {x.costoAsignadoAnimal ? ` · asignado ${formatearMoneda(x.costoAsignadoAnimal, moneda, cultura)}` : ""}
+                {x.vinculoCosto !== "SinCosto" ? ` · ${x.vinculoCosto}` : ""}
                 {x.observaciones ? ` · ${x.observaciones}` : ""}
               </Field>
             ))}
