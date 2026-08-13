@@ -32,7 +32,7 @@ const tabs = [
 ] as const;
 type Tab = (typeof tabs)[number];
 interface HistorialGrupo { id:string;grupoProductivoId:string;codigo:string;grupo:string;tipo:string;fechaInicio:string;fechaFin:string|null;motivoIngreso:string|null;motivoSalida:string|null;movimientoIngresoId:string|null;movimientoSalidaId:string|null }
-interface CicloEngorda { historialGrupoId:string;grupoCodigo:string;grupoNombre:string;fechaIngresoGrupo:string;fechaSalidaGrupo:string|null;diasEnGrupo:number;pesoInicialLibras:number|null;fechaPesoInicial:string|null;pesoActualLibras:number|null;fechaUltimoPeso:string|null;gananciaLibras:number|null;diasEntrePesajes:number|null;gmdLibrasDia:number|null;costoAcumuladoAnimal:number;costoEtapaEngorda:number;costoEntrePesajes:number;costoPorLibraGanada:number|null;porcentajeMeta:number|null;estadoGmd:string }
+interface CicloEngorda { historialGrupoId:string;grupoCodigo:string;grupoNombre:string;fechaIngresoGrupo:string;fechaSalidaGrupo:string|null;diasEnGrupo:number;pesoInicialLibras:number|null;fechaPesoInicial:string|null;pesoActualLibras:number|null;fechaUltimoPeso:string|null;gananciaLibras:number|null;diasEntrePesajes:number|null;gmdLibrasDia:number|null;pesoObjetivoLibras:number|null;librasFaltantes:number|null;porcentajeMeta:number|null;estadoMetaPeso:string;gmdObjetivoLibrasDia:number|null;estadoGmd:string;costoAcumuladoAnimal:number;costoEtapaEngorda:number;costoEntrePesajes:number;costoPorLibraGanada:number|null }
 
 const date = (value?: string | null) =>
   value ? new Date(value).toLocaleDateString("es-GT") : "No registrado";

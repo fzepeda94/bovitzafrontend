@@ -52,15 +52,17 @@ interface MetricaEngorda {
   historialGrupoId: string; animalId: string; codigoAnimal: string; arete: string | null;
   fechaIngresoGrupo: string; fechaSalidaGrupo: string | null; diasEnGrupo: number;
   pesoInicialLibras: number | null; fechaPesoInicial: string | null;
-  pesoActualLibras: number | null; fechaPesoActual: string | null;
+  pesoActualLibras: number | null; fechaUltimoPeso: string | null;
   gananciaLibras: number | null; diasEntrePesajes: number | null; gmdLibrasDia: number | null;
+  pesoObjetivoLibras: number | null; librasFaltantes: number | null;
   costoAcumuladoAnimal: number; costoEtapaEngorda: number; costoEntrePesajes: number;
-  costoPorLibraGanada: number | null; porcentajeMeta: number | null; estadoGmd: string;
+  costoPorLibraGanada: number | null; porcentajeMeta: number | null; estadoMetaPeso: string;
+  gmdObjetivoLibrasDia: number | null; estadoGmd: string;
 }
 interface PaginaEngorda {
-  grupoId: string; codigo: string; nombre: string; fechaCorte: string;
+  id: string; codigo: string; nombre: string; fechaCorte: string;
   pesoObjetivoLibras: number | null; gananciaDiariaObjetivoLibras: number | null;
-  resumen: { cantidadAnimales: number; pesoActualPromedio: number | null; gananciaTotalLibras: number; gmdPromedio: number | null; costoEtapaTotal: number; costoPromedioPorLibraGanada: number | null };
+  resumen: { cantidadAnimales: number; animalesConPesaje: number; animalesConDosPesajes: number; pesoInicialPromedio: number | null; pesoActualPromedio: number | null; gananciaTotalLibras: number; gananciaPromedioLibras: number | null; gmdPromedio: number | null; costoEtapaTotal: number; costoEntrePesajesTotal: number; costoPromedioPorLibraGanada: number | null };
   items: MetricaEngorda[]; total: number; page: number; pageSize: number;
 }
 const tipos = [
@@ -95,7 +97,7 @@ export function GruposProductivosPagina() {
   const [destinoSeleccionado, setDestinoSeleccionado] = useState<Grupo | null>(null);
   const [fechaCorteEngorda, setFechaCorteEngorda] = useState(new Date().toISOString().slice(0, 10));
   const [buscarEngorda, setBuscarEngorda] = useState("");
-  const [soloActualesEngorda, setSoloActualesEngorda] = useState(false);
+  const [soloActualesEngorda, setSoloActualesEngorda] = useState(true);
   const [paginaEngorda, setPaginaEngorda] = useState(1);
   const grupos = useQuery({
     queryKey: ["grupos-productivos", search, tipo, estado, page],
@@ -276,8 +278,8 @@ export function GruposProductivosPagina() {
     const filas: MetricaEngorda[] = []; let pagina = 1; let total = 0;
     do { const resultado = await api<PaginaEngorda>(rutaEngorda(pagina, 100)); filas.push(...resultado.items); total = resultado.total; pagina++; } while (filas.length < total);
     const escapar = (valor: unknown) => `"${String(valor ?? "").replaceAll('"', '""')}"`;
-    const columnas = ["Animal", "Arete", "Ingreso", "Salida", "Días grupo", "Peso inicial lb", "Peso actual lb", "Ganancia lb", "GMD lb/día", "Costo etapa", "Costo por lb", "Estado meta GMD"];
-    const contenido = [columnas, ...filas.map((x) => [x.codigoAnimal, x.arete, x.fechaIngresoGrupo.slice(0, 10), x.fechaSalidaGrupo?.slice(0, 10), x.diasEnGrupo, x.pesoInicialLibras, x.pesoActualLibras, x.gananciaLibras, x.gmdLibrasDia, x.costoEtapaEngorda, x.costoPorLibraGanada, x.estadoGmd])].map((fila) => fila.map(escapar).join(",")).join("\r\n");
+    const columnas = ["Animal", "Arete", "Ingreso", "Salida", "Días grupo", "Peso inicial lb", "Peso actual lb", "Ganancia lb", "GMD lb/día", "Peso objetivo lb", "Libras faltantes", "Avance %", "Costo etapa", "Costo por lb", "Estado meta peso", "Estado GMD"];
+    const contenido = [columnas, ...filas.map((x) => [x.codigoAnimal, x.arete, x.fechaIngresoGrupo.slice(0, 10), x.fechaSalidaGrupo?.slice(0, 10), x.diasEnGrupo, x.pesoInicialLibras, x.pesoActualLibras, x.gananciaLibras, x.gmdLibrasDia, x.pesoObjetivoLibras, x.librasFaltantes, x.porcentajeMeta, x.costoEtapaEngorda, x.costoPorLibraGanada, x.estadoMetaPeso, x.estadoGmd])].map((fila) => fila.map(escapar).join(",")).join("\r\n");
     const enlace = document.createElement("a"); enlace.href = URL.createObjectURL(new Blob(["\ufeff" + contenido], { type: "text/csv;charset=utf-8" })); enlace.download = `engorda-${detalle.data?.codigo ?? "grupo"}-${fechaCorteEngorda}.csv`; enlace.click(); URL.revokeObjectURL(enlace.href);
   };
   return (
@@ -392,6 +394,10 @@ export function GruposProductivosPagina() {
                         onClick={() => {
                           setDetalleId(g.id);
                           setAccion(null);
+                          setPaginaEngorda(1);
+                          setBuscarEngorda("");
+                          setSoloActualesEngorda(true);
+                          setFechaCorteEngorda(new Date().toISOString().slice(0, 10));
                         }}
                       >
                         Ver detalle
@@ -457,12 +463,14 @@ export function GruposProductivosPagina() {
                 <Input name="gananciaDiariaObjetivoLibras" label="GMD objetivo (lb/día)" type="number" min="0.01" step="0.01" defaultValue={engorda.data?.gananciaDiariaObjetivoLibras ?? ""} />
                 <div className="flex items-end"><Button type="submit">Guardar metas</Button></div>
               </form>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <Card><p className="text-xs text-slate-500">Animales</p><strong>{engorda.data?.resumen.cantidadAnimales ?? 0}</strong></Card>
                 <Card><p className="text-xs text-slate-500">Peso actual promedio</p><strong>{engorda.data?.resumen.pesoActualPromedio?.toFixed(2) ?? "—"} lb</strong></Card>
-                <Card><p className="text-xs text-slate-500">Ganancia</p><strong>{engorda.data?.resumen.gananciaTotalLibras.toFixed(2) ?? "0.00"} lb</strong></Card>
+                <Card><p className="text-xs text-slate-500">Ganancia total</p><strong>{engorda.data?.resumen.gananciaTotalLibras.toFixed(2) ?? "0.00"} lb</strong></Card>
+                <Card><p className="text-xs text-slate-500">Ganancia promedio</p><strong>{engorda.data?.resumen.gananciaPromedioLibras?.toFixed(2) ?? "—"} lb</strong></Card>
                 <Card><p className="text-xs text-slate-500">GMD promedio</p><strong>{engorda.data?.resumen.gmdPromedio?.toFixed(3) ?? "—"} lb/día</strong></Card>
                 <Card><p className="text-xs text-slate-500">Costo etapa</p><strong>{formatearMoneda(engorda.data?.resumen.costoEtapaTotal ?? 0, moneda, cultura)}</strong></Card>
+                <Card><p className="text-xs text-slate-500">Costo promedio por libra ganada</p><strong>{engorda.data?.resumen.costoPromedioPorLibraGanada == null ? "—" : formatearMoneda(engorda.data.resumen.costoPromedioPorLibraGanada, moneda, cultura)}</strong></Card>
               </div>
               <div className="grid gap-3 md:grid-cols-4">
                 <Input label="Fecha de corte" type="date" value={fechaCorteEngorda} onChange={(e) => { setFechaCorteEngorda(e.target.value); setPaginaEngorda(1); }} />
@@ -471,8 +479,8 @@ export function GruposProductivosPagina() {
                 <div className="flex items-end"><Button variant="secondary" onClick={() => void exportarEngorda()}>Exportar CSV</Button></div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-2">Animal</th><th>Período</th><th>Peso inicial</th><th>Peso actual</th><th>Ganancia</th><th>GMD</th><th>Costo etapa</th><th>Costo/lb</th><th>Meta</th></tr></thead>
-                  <tbody>{engorda.data?.items.map((x) => <tr key={x.historialGrupoId} className="border-b"><td className="p-2 font-semibold">{x.codigoAnimal}<small className="block font-normal text-slate-500">Arete {x.arete ?? "—"}</small></td><td>{x.fechaIngresoGrupo.slice(0,10)} · {x.fechaSalidaGrupo?.slice(0,10) ?? "Actual"}</td><td>{x.pesoInicialLibras?.toFixed(2) ?? "—"}</td><td>{x.pesoActualLibras?.toFixed(2) ?? "—"}</td><td>{x.gananciaLibras?.toFixed(2) ?? "—"}</td><td>{x.gmdLibrasDia?.toFixed(3) ?? "—"}</td><td>{formatearMoneda(x.costoEtapaEngorda, moneda, cultura)}</td><td>{x.costoPorLibraGanada == null ? "—" : formatearMoneda(x.costoPorLibraGanada, moneda, cultura)}</td><td>{x.estadoGmd}</td></tr>)}</tbody>
+                <table className="w-full min-w-[1500px] text-left text-sm"><thead><tr className="border-b"><th className="p-2">Animal</th><th>Período</th><th>Días</th><th>Peso inicial</th><th>Peso actual</th><th>Ganancia lb</th><th>GMD lb/día</th><th>Peso objetivo</th><th>Faltan lb</th><th>Avance %</th><th>Costo etapa</th><th>Costo/lb</th><th>Estado peso</th><th>Estado GMD</th></tr></thead>
+                  <tbody>{engorda.data?.items.map((x) => <tr key={x.historialGrupoId} className="border-b"><td className="p-2 font-semibold">{x.codigoAnimal}<small className="block font-normal text-slate-500">Arete {x.arete ?? "—"}</small></td><td>{x.fechaIngresoGrupo.slice(0,10)} · {x.fechaSalidaGrupo?.slice(0,10) ?? "Actual"}</td><td>{x.diasEnGrupo}</td><td>{x.pesoInicialLibras?.toFixed(2) ?? "—"}</td><td>{x.pesoActualLibras?.toFixed(2) ?? "—"}</td><td>{x.gananciaLibras?.toFixed(2) ?? "—"}</td><td>{x.gmdLibrasDia?.toFixed(3) ?? "—"}</td><td>{x.pesoObjetivoLibras?.toFixed(2) ?? "—"}</td><td>{x.librasFaltantes?.toFixed(2) ?? "—"}</td><td>{x.porcentajeMeta?.toFixed(2) ?? "—"}</td><td>{formatearMoneda(x.costoEtapaEngorda, moneda, cultura)}</td><td>{x.costoPorLibraGanada == null ? "—" : formatearMoneda(x.costoPorLibraGanada, moneda, cultura)}</td><td>{x.estadoMetaPeso}</td><td>{x.estadoGmd}</td></tr>)}</tbody>
                 </table>
                 {!engorda.isLoading && engorda.data?.items.length === 0 && <p className="p-5 text-center text-sm text-slate-500">No hay ciclos de engorda para los filtros seleccionados.</p>}
               </div>
