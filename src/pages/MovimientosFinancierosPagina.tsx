@@ -37,6 +37,10 @@ interface Movimiento {
 }
 interface Opcion {id:string;codigo?:string;codigoAnimal?:string;nombre?:string;arete?:string|null;estado?:string}
 interface CreditoOpcion {id:string;numeroCredito:string|null;entidadFinanciera:string;estado:string}
+interface AsignacionCostoVista { animalId:string; codigoAnimal:string; base:number; porcentaje:number; montoAsignado:number; animalDias:number|null }
+interface DistribucionCostoVista { id:string; ambito:string; metodo:string; montoDistribuir:number; fechaInicio:string|null; fechaFin:string|null; observaciones:string|null; asignaciones:AsignacionCostoVista[] }
+interface ResumenCostos { montoMovimiento:number; montoAsignado:number; montoPendienteAsignar:number; distribuciones:DistribucionCostoVista[] }
+interface VistaPreviaCosto extends Omit<ResumenCostos,"distribuciones"> { montoDistribuir:number; asignaciones:AsignacionCostoVista[] }
 const naturalezas = [
   "IngresoOperativo",
   "GastoOperativo",
@@ -53,6 +57,7 @@ export function MovimientosFinancierosPagina() {
   const [formulario, setFormulario] = useState(false);
   const [editando, setEditando] = useState<Movimiento | null>(null);
   const [detalle, setDetalle] = useState<Movimiento | null>(null);
+  const [formularioCosto,setFormularioCosto]=useState(false); const [ambitoCosto,setAmbitoCosto]=useState("Animales"); const [metodoCosto,setMetodoCosto]=useState("Igualitaria"); const [beneficiarioCosto,setBeneficiarioCosto]=useState(""); const [montoCosto,setMontoCosto]=useState(""); const [inicioCosto,setInicioCosto]=useState(""); const [finCosto,setFinCosto]=useState(""); const [observacionesCosto,setObservacionesCosto]=useState(""); const [animalesCosto,setAnimalesCosto]=useState<Record<string,{seleccionado:boolean;monto:string;porcentaje:string}>>({}); const [animalesResueltos,setAnimalesResueltos]=useState<AsignacionCostoVista[]>([]); const [vistaCosto,setVistaCosto]=useState<VistaPreviaCosto|null>(null);
   const [naturaleza, setNaturaleza] = useState("");
   const [origen, setOrigen] = useState("OperacionGanadera");
   const [search, setSearch] = useState("");
@@ -77,6 +82,10 @@ export function MovimientosFinancierosPagina() {
       api<PagedResult<Movimiento>>(
         `/finanzas/movimientos?page=${pagina}&pageSize=10&search=${encodeURIComponent(search)}&fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&naturaleza=${filtroNaturaleza}&categoriaId=${filtroCategoria}&propietarioId=${filtroPropietario}`,
       ),
+  });
+  const costos = useQuery({
+    queryKey:["financial-movement-costs",detalle?.id], enabled:Boolean(detalle?.id),
+    queryFn:()=>api<ResumenCostos>(`/finanzas/movimientos/${detalle!.id}/costos`),
   });
   const categoriasFiltradas = useMemo(
     () =>
@@ -166,6 +175,12 @@ export function MovimientosFinancierosPagina() {
     setOrigen(x.origenFondos);
     setFormulario(true);
   };
+  const abrirDetalle=(x:Movimiento)=>{setDetalle(x);setFormularioCosto(false);setVistaCosto(null)};
+  const solicitudCosto=()=>({montoDistribuir:Number(montoCosto),ambito:ambitoCosto,metodo:metodoCosto,beneficiarioId:ambitoCosto==="Animales"?null:beneficiarioCosto||null,fechaInicio:inicioCosto||null,fechaFin:finCosto||null,observaciones:observacionesCosto||null,animales:Object.entries(animalesCosto).filter(([,x])=>x.seleccionado).map(([animalId,x])=>({animalId,monto:x.monto?Number(x.monto):null,porcentaje:x.porcentaje?Number(x.porcentaje):null}))});
+  const previsualizarCosto=async()=>{if(!detalle)return;try{setVistaCosto(await api<VistaPreviaCosto>(`/finanzas/movimientos/${detalle.id}/distribuciones/vista-previa`,{method:"POST",body:JSON.stringify(solicitudCosto())}))}catch(error){notify({tone:"error",title:"No se pudo calcular la distribución",message:error instanceof Error?error.message:"Ocurrió un error."})}};
+  const cargarBeneficiariosCosto=async()=>{if(!detalle)return;try{const solicitud={...solicitudCosto(),metodo:"Igualitaria",animales:[]};const vista=await api<VistaPreviaCosto>(`/finanzas/movimientos/${detalle.id}/distribuciones/vista-previa`,{method:"POST",body:JSON.stringify(solicitud)});setAnimalesResueltos(vista.asignaciones);setAnimalesCosto(Object.fromEntries(vista.asignaciones.map(x=>[x.animalId,{seleccionado:true,monto:"",porcentaje:""}])));setVistaCosto(null)}catch(error){notify({tone:"error",title:"No se pudieron cargar los animales",message:error instanceof Error?error.message:"Ocurrió un error."})}};
+  const guardarCosto=async()=>{if(!detalle||!vistaCosto)return;try{await api(`/finanzas/movimientos/${detalle.id}/distribuciones`,{method:"POST",body:JSON.stringify(solicitudCosto())});notify({tone:"success",title:"Costo asignado",message:"La distribución se guardó sin crear otro movimiento financiero."});setFormularioCosto(false);setVistaCosto(null);await client.invalidateQueries({queryKey:["financial-movement-costs",detalle.id]})}catch(error){notify({tone:"error",title:"No se asignó el costo",message:error instanceof Error?error.message:"Ocurrió un error."})}};
+  const quitarDistribucion=async(id:string)=>{if(!detalle||!(await requestConfirmation({title:"Quitar distribución",message:"Las asignaciones dejarán de afectar el costo de los animales. El movimiento financiero se conservará.",confirmLabel:"Quitar",cancelLabel:"Volver"})))return;try{await api(`/finanzas/movimientos/${detalle.id}/distribuciones/${id}`,{method:"DELETE"});await client.invalidateQueries({queryKey:["financial-movement-costs",detalle.id]})}catch(error){notify({tone:"error",title:"No se quitó la distribución",message:error instanceof Error?error.message:"Ocurrió un error."})}};
   const exportar = async () => {
     try {
       const filas: Movimiento[] = [];
@@ -458,7 +473,7 @@ export function MovimientosFinancierosPagina() {
                     <div className="flex gap-1">
                       <IconButton
                         label="Ver detalle"
-                        onClick={() => setDetalle(x)}
+                        onClick={() => abrirDetalle(x)}
                       >
                         <Eye size={17} />
                       </IconButton>
@@ -512,6 +527,29 @@ export function MovimientosFinancierosPagina() {
           <p className="text-sm text-slate-500">
             {detalle.naturaleza} · {detalle.categoria} · {detalle.origenFondos}
           </p>
+          {detalle.naturaleza === "GastoOperativo" && (
+            <div className="mt-5 border-t pt-5">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div><span className="text-xs text-slate-500">Monto del movimiento</span><strong className="block">{formatearMoneda(costos.data?.montoMovimiento??detalle.monto,moneda,cultura)}</strong></div>
+                <div><span className="text-xs text-slate-500">Asignado</span><strong className="block">{formatearMoneda(costos.data?.montoAsignado??0,moneda,cultura)}</strong></div>
+                <div><span className="text-xs text-slate-500">Pendiente de asignar</span><strong className="block">{formatearMoneda(costos.data?.montoPendienteAsignar??detalle.monto,moneda,cultura)}</strong></div>
+              </div>
+              {!formularioCosto&&<Button className="mt-4" disabled={(costos.data?.montoPendienteAsignar??detalle.monto)<=0||detalle.estado==="Cancelado"} onClick={()=>{setFormularioCosto(true);setMontoCosto(String(costos.data?.montoPendienteAsignar??detalle.monto));setVistaCosto(null)}}>Asignar costo</Button>}
+              {formularioCosto&&<div className="mt-4 grid gap-4 rounded-xl border p-4 md:grid-cols-2">
+                <Input label="Monto a distribuir *" type="number" min="0.0001" step="0.0001" value={montoCosto} onChange={e=>{setMontoCosto(e.target.value);setVistaCosto(null)}} />
+                <Select label="Ámbito *" value={ambitoCosto} onChange={e=>{setAmbitoCosto(e.target.value);setBeneficiarioCosto("");setAnimalesResueltos([]);setAnimalesCosto({});setVistaCosto(null)}}><option value="Animales">Animales</option><option value="Propietario">Propietario</option><option value="LoteCompra">Lote de compra</option><option value="Finca">Finca</option><option value="Potrero">Potrero</option></Select>
+                <Select label="Método *" value={metodoCosto} onChange={e=>{setMetodoCosto(e.target.value);setVistaCosto(null)}}><option value="Igualitaria">Igualitaria</option><option value="MontoDirecto">Monto directo</option><option value="PorcentajeManual">Porcentaje manual</option><option value="PorPeso">Por peso</option><option value="AnimalDias">Animal-días</option></Select>
+                {ambitoCosto!=="Animales"&&<Select label="Beneficiario *" value={beneficiarioCosto} onChange={e=>{setBeneficiarioCosto(e.target.value);setVistaCosto(null)}}><option value="">Seleccionar...</option>{(ambitoCosto==="Propietario"?entidades.data?.items:ambitoCosto==="LoteCompra"?lotes.data:ambitoCosto==="Finca"?fincas.data?.items:potreros.data?.items)?.map(x=><option key={x.id} value={x.id}>{"nombreCompletoORazonSocial" in x?x.nombreCompletoORazonSocial:(x.codigo??x.codigoAnimal??"")+" "+(x.nombre??"")}</option>)}</Select>}
+                {(metodoCosto==="AnimalDias"||ambitoCosto==="Propietario"||ambitoCosto==="Finca"||ambitoCosto==="Potrero")&&<><Input label="Fecha inicio" type="date" value={inicioCosto} onChange={e=>{setInicioCosto(e.target.value);setVistaCosto(null)}}/><Input label="Fecha fin" type="date" value={finCosto} onChange={e=>{setFinCosto(e.target.value);setVistaCosto(null)}}/></>}
+                {ambitoCosto!=="Animales"&&(metodoCosto==="MontoDirecto"||metodoCosto==="PorcentajeManual")&&animalesResueltos.length===0&&<div className="md:col-span-2"><Button variant="secondary" onClick={()=>void cargarBeneficiariosCosto()}>Cargar animales beneficiarios</Button></div>}
+                {(ambitoCosto==="Animales"||animalesResueltos.length>0)&&<div className="md:col-span-2"><span className="text-sm font-semibold">Animales *</span><div className="mt-2 max-h-56 space-y-2 overflow-y-auto rounded-xl border p-3">{(ambitoCosto==="Animales"?(animales.data?.items??[]).map(a=>({id:a.id,codigo:a.codigoAnimal??"",arete:a.arete??null})):animalesResueltos.map(a=>({id:a.animalId,codigo:a.codigoAnimal,arete:null}))).map(a=>{const valor=animalesCosto[a.id]??{seleccionado:false,monto:"",porcentaje:""};return <div key={a.id} className="grid items-center gap-2 sm:grid-cols-[1fr_150px]"><label className="flex gap-2"><input type="checkbox" checked={valor.seleccionado} disabled={ambitoCosto!=="Animales"} onChange={e=>{setAnimalesCosto(v=>({...v,[a.id]:{...valor,seleccionado:e.target.checked}}));setVistaCosto(null)}}/>{a.codigo} {a.arete?`· ${a.arete}`:""}</label>{valor.seleccionado&&metodoCosto==="MontoDirecto"&&<Input aria-label={`Monto ${a.codigo}`} type="number" step="0.0001" placeholder="Monto" value={valor.monto} onChange={e=>{setAnimalesCosto(v=>({...v,[a.id]:{...valor,monto:e.target.value}}));setVistaCosto(null)}}/>}{valor.seleccionado&&metodoCosto==="PorcentajeManual"&&<Input aria-label={`Porcentaje ${a.codigo}`} type="number" step="0.0001" placeholder="%" value={valor.porcentaje} onChange={e=>{setAnimalesCosto(v=>({...v,[a.id]:{...valor,porcentaje:e.target.value}}));setVistaCosto(null)}}/>}</div>})}</div></div>}
+                <Input className="md:col-span-2" label="Observaciones" value={observacionesCosto} onChange={e=>setObservacionesCosto(e.target.value)}/>
+                <div className="flex gap-2 md:col-span-2"><Button onClick={()=>void previsualizarCosto()}>Vista previa</Button><Button variant="ghost" onClick={()=>{setFormularioCosto(false);setVistaCosto(null)}}>Cancelar</Button></div>
+              </div>}
+              {vistaCosto&&<div className="mt-4 overflow-x-auto"><h3 className="font-bold">Vista previa</h3><table className="mt-2 w-full min-w-[560px] text-sm"><thead><tr>{["Animal","Base","%","Monto asignado"].map(x=><th key={x} className="p-2 text-left">{x}</th>)}</tr></thead><tbody>{vistaCosto.asignaciones.map(x=><tr key={x.animalId} className="border-t"><td className="p-2">{x.codigoAnimal}</td><td>{x.base.toFixed(4)}</td><td>{x.porcentaje.toFixed(4)}%</td><td>{formatearMoneda(x.montoAsignado,moneda,cultura)}</td></tr>)}</tbody></table><div className="mt-3 flex items-center justify-between"><strong>Total: {formatearMoneda(vistaCosto.asignaciones.reduce((s,x)=>s+x.montoAsignado,0),moneda,cultura)}</strong><Button onClick={()=>void guardarCosto()}>Guardar distribución</Button></div></div>}
+              {(costos.data?.distribuciones.length??0)>0&&<div className="mt-5"><h3 className="font-bold">Distribuciones registradas</h3><div className="mt-2 space-y-2">{costos.data?.distribuciones.map(x=><div key={x.id} className="flex items-center justify-between rounded-xl bg-slate-100 p-3 dark:bg-slate-800"><div><strong>{x.ambito} · {x.metodo}</strong><span className="block text-sm text-slate-500">{x.asignaciones.length} animales · {formatearMoneda(x.montoDistribuir,moneda,cultura)}</span></div><IconButton tone="danger" label="Quitar distribución" onClick={()=>void quitarDistribucion(x.id)}><Power size={17}/></IconButton></div>)}</div></div>}
+            </div>
+          )}
         </Card>
       )}
     </>
