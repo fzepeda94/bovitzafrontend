@@ -30,6 +30,7 @@ const ConfiguracionPagina=lazy(()=>import('./pages/ConfiguracionPagina').then(x=
 const UsuariosPagina=lazy(()=>import('./pages/UsuariosPagina').then(x=>({default:x.UsuariosPagina})))
 const SeguridadPagina=lazy(()=>import('./pages/SeguridadPagina').then(x=>({default:x.SeguridadPagina})))
 const ReporteInventarioPagina=lazy(()=>import('./pages/ReporteInventarioPagina').then(x=>({default:x.ReporteInventarioPagina})))
+const ReportesGerencialesPagina=lazy(()=>import('./pages/ReportesGerencialesPagina').then(x=>({default:x.ReportesGerencialesPagina})))
 const TransferenciasPagina=lazy(()=>import('./pages/TransferenciasPagina').then(x=>({default:x.TransferenciasPagina})))
 const TransferenciasRecibidasPagina=lazy(()=>import('./pages/TransferenciasRecibidasPagina').then(x=>({default:x.TransferenciasRecibidasPagina})))
 const TransferenciasEnviadasPagina=lazy(()=>import('./pages/TransferenciasEnviadasPagina').then(x=>({default:x.TransferenciasEnviadasPagina})))
@@ -45,6 +46,7 @@ const router=createBrowserRouter([{element:<GuestRoute/>,children:[{path:'/login
   {path:'datos-maestros/entidades',element:cargar(<EntidadesPagina/>)},{path:'datos-maestros/fincas',element:cargar(<FincasPagina/>)},{path:'datos-maestros/potreros',element:cargar(<PotrerosPagina/>)},{path:'datos-maestros/catalogos/:tipo',element:cargar(<CatalogosMaestrosPagina/>)},{path:'datos-maestros/catalogos',element:cargar(<CatalogosMaestrosPagina/>)},
   {path:'salud',element:cargar(<SaludPesajesPagina/>)},
   {path:'reportes/inventario',element:cargar(<ReporteInventarioPagina/>)},
+  {path:'reportes/gerenciales',element:cargar(<ReportesGerencialesPagina/>)},
   {path:'transferencias/cambio-propietario',element:cargar(<TransferenciasPagina/>)},
   {path:'transferencias/recibidas',element:cargar(<TransferenciasRecibidasPagina/>)},
   {path:'transferencias/enviadas',element:cargar(<TransferenciasEnviadasPagina/>)},

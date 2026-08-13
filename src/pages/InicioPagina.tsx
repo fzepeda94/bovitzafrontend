@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   Activity,
   Beef,
@@ -43,11 +44,25 @@ interface DashboardData {
   creditos: { cantidad: number; principalTotal: number; totalContractual: number; costoFinancieroTotal: number };
 }
 
+interface ResumenMesData {
+  ingresosOperativos: number;
+  gastosOperativos: number;
+  resultadoNeto: number;
+  animalesHatoEnCurso: number;
+}
+
 export function DashboardPage() {
   const { moneda, cultura } = useMonedaTenant();
   const query = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api<DashboardData>("/dashboard"),
+  });
+  const hoy = new Date();
+  const fechaFin = hoy.toISOString().slice(0, 10);
+  const fechaInicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+  const resumenMes = useQuery({
+    queryKey: ["reportes-gerenciales", "resumen-mes", fechaInicio, fechaFin],
+    queryFn: () => api<ResumenMesData>(`/reportes-gerenciales/resumen?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`),
   });
   if (query.isLoading) return <DashboardSkeleton />;
   if (query.isError)
@@ -94,6 +109,17 @@ export function DashboardPage() {
         title="Buenos días"
         description="Una lectura clara del hato y sus números, actualizada con los registros del tenant activo."
       />
+      {resumenMes.data && (
+        <Card className="mb-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="font-display text-lg font-bold">Resumen del mes</h2>
+              <p className="text-sm text-slate-500">Ingresos {formatearMoneda(resumenMes.data.ingresosOperativos, moneda, cultura)} · Gastos {formatearMoneda(resumenMes.data.gastosOperativos, moneda, cultura)} · Resultado {formatearMoneda(resumenMes.data.resultadoNeto, moneda, cultura)} · Hato {resumenMes.data.animalesHatoEnCurso}</p>
+            </div>
+            <Link className="btn-primary" to="/reportes/gerenciales">Ver reportes gerenciales</Link>
+          </div>
+        </Card>
+      )}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {indicators.map(({ label, value, icon: Icon, tone }) => (
           <Card key={label}>
