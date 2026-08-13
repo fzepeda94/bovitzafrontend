@@ -45,10 +45,10 @@ interface DashboardData {
 }
 
 interface ResumenMesData {
-  ingresosOperativos: number;
-  gastosOperativos: number;
-  resultadoNeto: number;
-  animalesHatoEnCurso: number;
+  resultadoOperativo: number;
+  flujoCajaNetoPagado: number;
+  margenRealizadoVentas: number;
+  apoyoDirectoPropietario: number;
 }
 
 export function DashboardPage() {
@@ -114,7 +114,7 @@ export function DashboardPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="font-display text-lg font-bold">Resumen del mes</h2>
-              <p className="text-sm text-slate-500">Ingresos {formatearMoneda(resumenMes.data.ingresosOperativos, moneda, cultura)} · Gastos {formatearMoneda(resumenMes.data.gastosOperativos, moneda, cultura)} · Resultado {formatearMoneda(resumenMes.data.resultadoNeto, moneda, cultura)} · Hato {resumenMes.data.animalesHatoEnCurso}</p>
+              <p className="text-sm text-slate-500">Resultado operativo {formatearMoneda(resumenMes.data.resultadoOperativo, moneda, cultura)} · Flujo pagado {formatearMoneda(resumenMes.data.flujoCajaNetoPagado, moneda, cultura)} · Margen ventas {formatearMoneda(resumenMes.data.margenRealizadoVentas, moneda, cultura)} · Apoyo directo {formatearMoneda(resumenMes.data.apoyoDirectoPropietario, moneda, cultura)}</p>
             </div>
             <Link className="btn-primary" to="/reportes/gerenciales">Ver reportes gerenciales</Link>
           </div>

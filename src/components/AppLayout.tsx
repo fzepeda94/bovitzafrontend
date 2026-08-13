@@ -84,6 +84,11 @@ const topNavigation: NavigationItem[] = [
     icon: ShieldPlus,
   },
   {
+    to: '/reportes/inventario',
+    label: 'REPORTE DE INVENTARIO',
+    icon: Database,
+  },
+  {
     to: '/reportes/gerenciales',
     label: 'REPORTES GERENCIALES',
     icon: Database,
