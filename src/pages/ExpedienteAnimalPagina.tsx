@@ -33,6 +33,7 @@ const tabs = [
 type Tab = (typeof tabs)[number];
 interface HistorialGrupo { id:string;grupoProductivoId:string;codigo:string;grupo:string;tipo:string;fechaInicio:string;fechaFin:string|null;motivoIngreso:string|null;motivoSalida:string|null;movimientoIngresoId:string|null;movimientoSalidaId:string|null }
 interface CicloEngorda { historialGrupoId:string;grupoCodigo:string;grupoNombre:string;fechaIngresoGrupo:string;fechaSalidaGrupo:string|null;diasEnGrupo:number;pesoInicialLibras:number|null;fechaPesoInicial:string|null;pesoActualLibras:number|null;fechaUltimoPeso:string|null;gananciaLibras:number|null;diasEntrePesajes:number|null;gmdLibrasDia:number|null;pesoObjetivoLibras:number|null;librasFaltantes:number|null;porcentajeMeta:number|null;estadoMetaPeso:string;gmdObjetivoLibrasDia:number|null;estadoGmd:string;costoAcumuladoAnimal:number;costoEtapaEngorda:number;costoEntrePesajes:number;costoPorLibraGanada:number|null }
+interface VentaAnimal { ventaId:string;codigo:string;fecha:string;comprador:string;modalidad:string;pesoLibras:number|null;precioUnitario:number;precioBruto:number;gastosDirectos:number;ingresoNeto:number;costoAcumuladoReal:number;margenReal:number;grupoProductivo:string|null }
 
 const date = (value?: string | null) =>
   value ? new Date(value).toLocaleDateString("es-GT") : "No registrado";
@@ -105,6 +106,7 @@ export function AnimalDetailPage() {
   });
   const gruposQuery = useQuery({queryKey:["animal-groups",id],queryFn:()=>api<HistorialGrupo[]>(`/grupos-productivos/animales/${id}/historial`),enabled:!!id});
   const engordaQuery = useQuery({queryKey:["animal-engorda",id],queryFn:()=>api<CicloEngorda[]>(`/grupos-productivos/animales/${id}/engorda`),enabled:!!id});
+  const ventaQuery = useQuery({queryKey:["animal-sale",id],queryFn:()=>api<VentaAnimal|null>(`/ventas-ganado/animal/${id}`),enabled:!!id});
   const animal = animalQuery.data;
   const record = recordQuery.data;
   const timeline = useMemo(
@@ -676,6 +678,7 @@ export function AnimalDetailPage() {
             <Field label="Grupo productivo actual">{gruposQuery.data?.find(x=>!x.fechaFin)?.grupo??"Sin grupo"}</Field>
             <Field label="Tipo de grupo">{gruposQuery.data?.find(x=>!x.fechaFin)?.tipo??"No aplica"}</Field>
             <Field label="Fecha de ingreso al grupo">{date(gruposQuery.data?.find(x=>!x.fechaFin)?.fechaInicio)}</Field>
+            {ventaQuery.data&&<><Field label="Venta">{ventaQuery.data.codigo} · {date(ventaQuery.data.fecha)} · {ventaQuery.data.comprador}</Field><Field label="Condiciones de venta">{ventaQuery.data.modalidad} · {ventaQuery.data.pesoLibras?`${ventaQuery.data.pesoLibras.toFixed(2)} lb · `:""}{formatearMoneda(ventaQuery.data.precioUnitario,moneda,cultura)}</Field><Field label="Resultado comercial">Bruto {formatearMoneda(ventaQuery.data.precioBruto,moneda,cultura)} · Gastos {formatearMoneda(ventaQuery.data.gastosDirectos,moneda,cultura)} · Neto {formatearMoneda(ventaQuery.data.ingresoNeto,moneda,cultura)} · Costo {formatearMoneda(ventaQuery.data.costoAcumuladoReal,moneda,cultura)} · Margen real {formatearMoneda(ventaQuery.data.margenReal,moneda,cultura)}</Field><Field label="Grupo productivo de salida">{ventaQuery.data.grupoProductivo??"Sin grupo"}</Field></>}
           </div>
         )}
         {tab === "Identificación" && (

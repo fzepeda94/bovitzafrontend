@@ -1,233 +1,45 @@
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2 } from "lucide-react";
 import { api } from "../lib/api";
 import { notify, requestConfirmation } from "../lib/feedback";
-import type { Animal, Entity, PagedResult } from "../types";
-import { Button, Card, Input, Select } from "../components/ui";
+import type { Entity, PagedResult } from "../types";
+import { Button, Card, Input, Pagination, Select } from "../components/ui";
 import { PageHeader } from "../components/Page";
 import { formatearMoneda, useMonedaTenant } from "../lib/moneda";
 
-interface Venta {
-  id: string;
-  codigo: string;
-  fecha: string;
-  cantidad: number;
-  ingreso: number;
-  estado: string;
-}
+type Modalidad = "PorCabeza" | "PorLibra";
+interface Candidato { animalId:string;codigoAnimal:string;arete:string|null;sexo:string;categoria:string;propietario:string;grupoActual:string|null;ultimoPesoLibras:number|null;fechaUltimoPeso:string|null }
+interface DetalleFormulario extends Candidato { pesoLibras:string;precioUnitario:string }
+interface Venta { id:string;codigo:string;fecha:string;vendedor:string;comprador:string;modalidad:Modalidad;cantidad:number;ingresoBruto:number;gastos:number;ingresoNeto:number;costoTotal:number;margenReal:number;estado:string }
+interface DetalleVenta { animalId:string;codigoAnimal:string;arete:string|null;grupoProductivo:string|null;modalidad:Modalidad;pesoLibras:number|null;precioUnitario:number;precioBruto:number;gastosDirectos:number;ingresoNeto:number;costoAcumuladoReal:number;margenReal:number;porcentajeMargenReal:number|null }
+interface VentaCompleta extends Venta { compradorId:string;transporte:number;comision:number;otrosGastos:number;documento:string|null;metodoPago:string|null;observaciones:string|null;gastosDirectos:number;costoAcumulado:number;detalles:DetalleVenta[];resumenPorGrupo:{grupo:string;cantidad:number;ingresoNeto:number;costoAcumulado:number;margenReal:number}[] }
 
 export function VentasGanadoPagina() {
-  const { moneda, cultura } = useMonedaTenant();
-  const client = useQueryClient();
-  const animals = useQuery({
-    queryKey: ["animals-sale"],
-    queryFn: () => api<PagedResult<Animal>>("/animales?pageSize=100"),
-  });
-  const entities = useQuery({
-    queryKey: ["entities"],
-    queryFn: () => api<PagedResult<Entity>>("/entidades?pageSize=100"),
-  });
-  const sales = useQuery({
-    queryKey: ["sales"],
-    queryFn: () => api<Venta[]>("/ventas-ganado"),
-  });
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    const animalIds = data.getAll("animales").map(String);
-    try {
-      await api("/ventas-ganado", {
-        method: "POST",
-        body: JSON.stringify({
-          fecha: data.get("fecha"),
-          compradorId: data.get("comprador"),
-          animalIds,
-          modalidad: data.get("modalidad"),
-          ingresoTotal: Number(data.get("ingreso")),
-          transporte: Number(data.get("transporte") || 0),
-          comision: Number(data.get("comision") || 0),
-          otrosGastos: Number(data.get("otros") || 0),
-          documento: data.get("documento") || null,
-          metodoPago: data.get("metodoPago") || null,
-          observaciones: data.get("observaciones") || null,
-        }),
-      });
-      form.reset();
-      notify({
-        tone: "success",
-        title: "Borrador creado",
-        message:
-          "Los bovinos continúan en inventario hasta confirmar la venta.",
-      });
-      await client.invalidateQueries({ queryKey: ["sales"] });
-    } catch (error) {
-      notify({
-        tone: "error",
-        title: "No se guardó la venta",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Ocurrió un error inesperado.",
-      });
-    }
-  };
-  const confirmar = async (venta: Venta) => {
-    if (
-      !(await requestConfirmation({
-        title: "Confirmar venta",
-        message: `Se retirarán ${venta.cantidad} bovino(s) del inventario y se registrará el ingreso.`,
-        confirmLabel: "Confirmar venta",
-        cancelLabel: "Volver",
-      }))
-    )
-      return;
-    try {
-      await api(`/ventas-ganado/${venta.id}/confirmar`, { method: "POST" });
-      notify({
-        tone: "success",
-        title: "Venta confirmada",
-        message:
-          "Los bovinos salieron del inventario y conservan su expediente.",
-      });
-      await Promise.all([
-        client.invalidateQueries({ queryKey: ["sales"] }),
-        client.invalidateQueries({ queryKey: ["animals"] }),
-        client.invalidateQueries({ queryKey: ["animals-sale"] }),
-      ]);
-    } catch (error) {
-      notify({
-        tone: "error",
-        title: "No se confirmó la venta",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Ocurrió un error inesperado.",
-      });
-    }
-  };
-  return (
-    <>
-      <PageHeader
-        eyebrow="Salidas"
-        title="Ventas de ganado"
-        description="La venta se prepara en borrador. Solo la confirmación retira bovinos y registra el ingreso."
-      />
-      <div className="grid gap-5 lg:grid-cols-[1fr_420px]">
-        <Card>
-          <form onSubmit={(event) => void submit(event)} className="grid gap-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Input
-                name="fecha"
-                label="Fecha de venta *"
-                type="date"
-                required
-                defaultValue={new Date().toISOString().slice(0, 10)}
-              />
-              <Select name="comprador" label="Entidad compradora *" required>
-                <option value="">Seleccionar…</option>
-                {entities.data?.items.map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.codigo} · {x.nombreCompletoORazonSocial}
-                  </option>
-                ))}
-              </Select>
-              <Select name="modalidad" label="Modalidad *">
-                <option>PorCabeza</option>
-                <option>PorLibra</option>
-              </Select>
-              <Input
-                name="ingreso"
-                label={`Precio total de venta${moneda ? ` (${moneda})` : ""} *`}
-                type="number"
-                min="0"
-                step="0.01"
-                required
-              />
-              <Input
-                name="transporte"
-                label={`Transporte${moneda ? ` (${moneda})` : ""}`}
-                type="number"
-                min="0"
-                step="0.01"
-              />
-              <Input
-                name="comision"
-                label={`Comisión${moneda ? ` (${moneda})` : ""}`}
-                type="number"
-                min="0"
-                step="0.01"
-              />
-              <Input
-                name="otros"
-                label={`Otros gastos${moneda ? ` (${moneda})` : ""}`}
-                type="number"
-                min="0"
-                step="0.01"
-              />
-              <Input name="documento" label="Factura o documento" />
-              <Input name="metodoPago" label="Método de pago" />
-              <Input name="observaciones" label="Observaciones" />
-            </div>
-            <fieldset>
-              <legend className="text-sm font-medium">
-                Bovinos a vender *
-              </legend>
-              <div className="mt-2 grid max-h-72 gap-2 overflow-y-auto sm:grid-cols-2">
-                {animals.data?.items.map((animal) => (
-                  <label
-                    key={animal.id}
-                    className="flex gap-2 rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800"
-                  >
-                    <input type="checkbox" name="animales" value={animal.id} />
-                    <span>
-                      <b>{animal.codigoAnimal}</b>
-                      {animal.arete ? ` · Arete ${animal.arete}` : ""}
-                      <span className="block text-xs text-slate-500">
-                        {animal.propietario} · {animal.sexo} ·{" "}
-                        {animal.categoria}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <Button type="submit">Guardar borrador</Button>
-          </form>
-        </Card>
-        <Card>
-          <h2 className="font-display text-lg font-bold">Ventas registradas</h2>
-          <div className="mt-3 grid gap-2">
-            {sales.data?.map((venta) => (
-              <div
-                key={venta.id}
-                className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800"
-              >
-                <div>
-                  <p className="font-semibold">
-                    {venta.codigo} · {venta.cantidad} bovino(s)
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {new Date(venta.fecha).toLocaleDateString("es-GT")} ·{" "}
-                    {venta.estado} · {formatearMoneda(venta.ingreso, moneda, cultura)}
-                  </p>
-                </div>
-                {venta.estado === "Borrador" && (
-                  <button
-                    type="button"
-                    onClick={() => void confirmar(venta)}
-                    title="Confirmar venta"
-                    className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-500"
-                  >
-                    <CheckCircle2 size={20} />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-    </>
-  );
+  const { moneda, cultura } = useMonedaTenant(); const client=useQueryClient();
+  const hoy=new Date().toISOString().slice(0,10);
+  const [formVisible,setFormVisible]=useState(false); const [editando,setEditando]=useState<VentaCompleta|null>(null); const [detalleId,setDetalleId]=useState<string|null>(null);
+  const [fecha,setFecha]=useState(hoy); const [compradorId,setCompradorId]=useState(""); const [modalidad,setModalidad]=useState<Modalidad>("PorCabeza"); const [transporte,setTransporte]=useState("0"); const [comision,setComision]=useState("0"); const [otros,setOtros]=useState("0"); const [documento,setDocumento]=useState(""); const [metodoPago,setMetodoPago]=useState(""); const [observaciones,setObservaciones]=useState("");
+  const [seleccionados,setSeleccionados]=useState<Record<string,DetalleFormulario>>({}); const [buscarCandidato,setBuscarCandidato]=useState(""); const [paginaCandidato,setPaginaCandidato]=useState(1); const [precioTodos,setPrecioTodos]=useState("");
+  const [buscar,setBuscar]=useState(""); const [estado,setEstado]=useState(""); const [filtroModalidad,setFiltroModalidad]=useState(""); const [fechaInicio,setFechaInicio]=useState(""); const [fechaFin,setFechaFin]=useState(""); const [pagina,setPagina]=useState(1);
+  const entidades=useQuery({queryKey:["entities-sale"],queryFn:()=>api<PagedResult<Entity>>( "/entidades?pageSize=100")});
+  const candidatos=useQuery({queryKey:["sales-candidates",buscarCandidato,paginaCandidato],queryFn:()=>api<PagedResult<Candidato>>(`/ventas-ganado/candidatos?search=${encodeURIComponent(buscarCandidato)}&page=${paginaCandidato}&pageSize=10`),enabled:formVisible});
+  const ventas=useQuery({queryKey:["sales",buscar,estado,filtroModalidad,fechaInicio,fechaFin,pagina],queryFn:()=>api<PagedResult<Venta>>(`/ventas-ganado?search=${encodeURIComponent(buscar)}&estado=${estado}&modalidad=${filtroModalidad}&fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&page=${pagina}&pageSize=10`)});
+  const detalle=useQuery({queryKey:["sale-detail",detalleId],queryFn:()=>api<VentaCompleta>(`/ventas-ganado/${detalleId}`),enabled:!!detalleId});
+  const totalBruto=Object.values(seleccionados).reduce((s,x)=>s+(modalidad==="PorLibra"?Number(x.pesoLibras||0)*Number(x.precioUnitario||0):Number(x.precioUnitario||0)),0); const gastos=Number(transporte||0)+Number(comision||0)+Number(otros||0);
+  const actualizarSeleccionado=(id:string,cambios:Partial<DetalleFormulario>)=>setSeleccionados(actual=>{const existente=actual[id];return existente?{...actual,[id]:{...existente,...cambios}}:actual});
+  const limpiar=()=>{setEditando(null);setFecha(hoy);setCompradorId("");setModalidad("PorCabeza");setTransporte("0");setComision("0");setOtros("0");setDocumento("");setMetodoPago("");setObservaciones("");setSeleccionados({});setBuscarCandidato("");setPaginaCandidato(1);};
+  const abrirNueva=()=>{limpiar();setFormVisible(true)};
+  const editar=async(id:string)=>{const v=await api<VentaCompleta>(`/ventas-ganado/${id}`);setEditando(v);setFecha(v.fecha.slice(0,10));setCompradorId(v.compradorId);setModalidad(v.modalidad);setTransporte(String(v.transporte));setComision(String(v.comision));setOtros(String(v.otrosGastos));setDocumento(v.documento??"");setMetodoPago(v.metodoPago??"");setObservaciones(v.observaciones??"");setSeleccionados(Object.fromEntries(v.detalles.map(x=>[x.animalId,{animalId:x.animalId,codigoAnimal:x.codigoAnimal,arete:x.arete,sexo:"",categoria:"",propietario:"",grupoActual:x.grupoProductivo,ultimoPesoLibras:null,fechaUltimoPeso:null,pesoLibras:x.pesoLibras?.toString()??"",precioUnitario:x.precioUnitario.toString()}])));setFormVisible(true)};
+  const guardar=async(e:FormEvent)=>{e.preventDefault();try{await api(editando?`/ventas-ganado/${editando.id}`:"/ventas-ganado",{method:editando?"PUT":"POST",body:JSON.stringify({fecha,compradorId,modalidad,detalles:Object.values(seleccionados).map(x=>({animalId:x.animalId,pesoLibras:x.pesoLibras?Number(x.pesoLibras):null,precioUnitario:Number(x.precioUnitario)})),transporte:Number(transporte),comision:Number(comision),otrosGastos:Number(otros),documento:documento||null,metodoPago:metodoPago||null,observaciones:observaciones||null})});notify({tone:"success",title:"Borrador guardado",message:"La venta queda pendiente de confirmación."});setFormVisible(false);limpiar();await client.invalidateQueries({queryKey:["sales"]})}catch(error){notify({tone:"error",title:"No se guardó la venta",message:error instanceof Error?error.message:"Error inesperado."})}};
+  const confirmar=async(v:Venta)=>{if(!await requestConfirmation({title:"Confirmar venta",message:`Se retirarán ${v.cantidad} bovino(s) del inventario.`,confirmLabel:"Confirmar",cancelLabel:"Volver"}))return;try{await api(`/ventas-ganado/${v.id}/confirmar`,{method:"POST"});notify({tone:"success",title:"Venta confirmada",message:"Inventario, finanzas y márgenes fueron actualizados."});await Promise.all([client.invalidateQueries({queryKey:["sales"]}),client.invalidateQueries({queryKey:["animals"]})])}catch(error){notify({tone:"error",title:"No se confirmó",message:error instanceof Error?error.message:"Error inesperado."})}};
+  const anular=async(v:Venta)=>{if(!await requestConfirmation({title:"Anular borrador",message:`Se anulará ${v.codigo}.`,confirmLabel:"Anular",cancelLabel:"Volver"}))return;await api(`/ventas-ganado/${v.id}/anular`,{method:"POST"});await client.invalidateQueries({queryKey:["sales"]});};
+  return <><PageHeader eyebrow="Salidas" title="Ventas de ganado" description="Ventas por cabeza o por libra con costos y margen real por bovino." actions={<Button onClick={abrirNueva}>Nueva venta</Button>}/>
+    <Card className="mb-5"><div className="grid gap-3 md:grid-cols-5"><Input label="Buscar" value={buscar} onChange={e=>{setBuscar(e.target.value);setPagina(1)}}/><Input label="Fecha inicio" type="date" value={fechaInicio} onChange={e=>{setFechaInicio(e.target.value);setPagina(1)}}/><Input label="Fecha fin" type="date" value={fechaFin} onChange={e=>{setFechaFin(e.target.value);setPagina(1)}}/><Select label="Estado" value={estado} onChange={e=>{setEstado(e.target.value);setPagina(1)}}><option value="">Todos</option><option>Borrador</option><option>Confirmado</option><option>Anulado</option></Select><Select label="Modalidad" value={filtroModalidad} onChange={e=>{setFiltroModalidad(e.target.value);setPagina(1)}}><option value="">Todas</option><option>PorCabeza</option><option>PorLibra</option></Select></div></Card>
+    {formVisible&&<Card className="mb-5"><h2 className="font-display text-xl font-bold">{editando?"Editar venta":"Nueva venta"}</h2><form className="mt-4 grid gap-4" onSubmit={e=>void guardar(e)}><div className="grid gap-3 md:grid-cols-3"><Input label="Fecha *" type="date" required max={hoy} value={fecha} onChange={e=>setFecha(e.target.value)}/><Select label="Comprador *" required value={compradorId} onChange={e=>setCompradorId(e.target.value)}><option value="">Seleccionar...</option>{entidades.data?.items.map(x=><option key={x.id} value={x.id}>{x.codigo} · {x.nombreCompletoORazonSocial}</option>)}</Select><Select label="Modalidad *" value={modalidad} onChange={e=>setModalidad(e.target.value as Modalidad)}><option value="PorCabeza">Por cabeza</option><option value="PorLibra">Por libra</option></Select><Input label="Transporte" type="number" min="0" step="0.01" value={transporte} onChange={e=>setTransporte(e.target.value)}/><Input label="Comisión" type="number" min="0" step="0.01" value={comision} onChange={e=>setComision(e.target.value)}/><Input label="Otros gastos" type="number" min="0" step="0.01" value={otros} onChange={e=>setOtros(e.target.value)}/><Input label="Documento" value={documento} onChange={e=>setDocumento(e.target.value)}/><Input label="Método de pago" value={metodoPago} onChange={e=>setMetodoPago(e.target.value)}/><Input label="Observaciones" value={observaciones} onChange={e=>setObservaciones(e.target.value)}/></div>
+      <div className="grid gap-3 md:grid-cols-[1fr_240px]"><Input label="Buscar bovinos" value={buscarCandidato} onChange={e=>{setBuscarCandidato(e.target.value);setPaginaCandidato(1)}}/><div className="flex items-end gap-2"><Input label={modalidad==="PorLibra"?"Precio/lb para todos":"Precio para todos"} type="number" min="0" step="0.01" value={precioTodos} onChange={e=>setPrecioTodos(e.target.value)}/><Button type="button" variant="secondary" onClick={()=>setSeleccionados(s=>Object.fromEntries(Object.entries(s).map(([id,x])=>[id,{...x,precioUnitario:precioTodos}])))}>Aplicar</Button></div></div>
+      <div className="grid gap-2">{candidatos.data?.items.map(x=>{const seleccionado=seleccionados[x.animalId];return <label key={x.animalId} className="grid gap-3 rounded-xl bg-slate-50 p-3 md:grid-cols-[32px_1fr_180px_180px] dark:bg-slate-800"><input type="checkbox" checked={!!seleccionado} onChange={e=>setSeleccionados(s=>{const n={...s};if(e.target.checked)n[x.animalId]={...x,pesoLibras:"",precioUnitario:""};else delete n[x.animalId];return n})}/><span><b>{x.codigoAnimal}</b> · Arete {x.arete??"—"}<small className="block text-slate-500">{x.sexo} · {x.categoria} · {x.propietario} · {x.grupoActual??"Sin grupo"}<br/>Último pesaje: {x.ultimoPesoLibras?`${x.ultimoPesoLibras.toFixed(2)} lb`:"—"}</small></span>{seleccionado&&<>{modalidad==="PorLibra"?<div><Input label="Peso venta (lb) *" type="number" min="0" step="0.01" value={seleccionado.pesoLibras} onChange={e=>actualizarSeleccionado(x.animalId,{pesoLibras:e.target.value})}/>{x.ultimoPesoLibras&&<button type="button" className="text-xs text-emerald-600" onClick={()=>actualizarSeleccionado(x.animalId,{pesoLibras:String(x.ultimoPesoLibras)})}>Usar último pesaje</button>}</div>:<span/>}<Input label={modalidad==="PorLibra"?"Precio por lb *":"Precio por cabeza *"} type="number" min="0" step="0.01" value={seleccionado.precioUnitario} onChange={e=>actualizarSeleccionado(x.animalId,{precioUnitario:e.target.value})}/></>}</label>})}</div><Pagination page={paginaCandidato} totalPages={Math.max(1,Math.ceil((candidatos.data?.total??0)/10))} totalItems={candidatos.data?.total??0} pageSize={10} onPageChange={setPaginaCandidato} label="Bovinos candidatos"/>
+      <Card><div className="grid gap-2 sm:grid-cols-4"><span>Animales: <b>{Object.keys(seleccionados).length}</b></span><span>Peso total: <b>{modalidad==="PorLibra"?Object.values(seleccionados).reduce((s,x)=>s+Number(x.pesoLibras||0),0).toFixed(2)+" lb":"—"}</b></span><span>Ingreso bruto: <b>{formatearMoneda(totalBruto,moneda,cultura)}</b></span><span>Gastos: <b>{formatearMoneda(gastos,moneda,cultura)}</b></span><span>Ingreso neto estimado: <b>{formatearMoneda(totalBruto-gastos,moneda,cultura)}</b></span></div></Card><div className="flex gap-2"><Button type="submit">Guardar borrador</Button><Button type="button" variant="ghost" onClick={()=>{setFormVisible(false);limpiar()}}>Cancelar</Button></div></form></Card>}
+    <Card><div className="overflow-x-auto"><table className="w-full min-w-[1100px] text-left text-sm"><thead><tr className="border-b"><th className="p-3">Venta</th><th>Fecha</th><th>Comprador</th><th>Modalidad</th><th>Animales</th><th>Ingreso bruto</th><th>Gastos</th><th>Margen real</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{ventas.data?.items.map(v=><tr key={v.id} className="border-b"><td className="p-3 font-semibold">{v.codigo}</td><td>{new Date(v.fecha).toLocaleDateString("es-GT")}</td><td>{v.comprador}</td><td>{v.modalidad}</td><td>{v.cantidad}</td><td>{formatearMoneda(v.ingresoBruto,moneda,cultura)}</td><td>{formatearMoneda(v.gastos,moneda,cultura)}</td><td>{formatearMoneda(v.margenReal,moneda,cultura)}</td><td>{v.estado}</td><td><div className="flex gap-2"><Button variant="secondary" onClick={()=>setDetalleId(v.id)}>Ver detalle</Button>{v.estado==="Borrador"&&<><Button variant="ghost" onClick={()=>void editar(v.id)}>Editar</Button><Button onClick={()=>void confirmar(v)}>Confirmar</Button><Button variant="danger" onClick={()=>void anular(v)}>Anular</Button></>}</div></td></tr>)}</tbody></table></div><Pagination page={pagina} totalPages={Math.max(1,Math.ceil((ventas.data?.total??0)/10))} totalItems={ventas.data?.total??0} pageSize={10} onPageChange={setPagina} label="Ventas"/></Card>
+    {detalle.data&&<Card className="mt-5"><div className="flex justify-between"><div><p className="text-xs uppercase text-emerald-600">{detalle.data.codigo}</p><h2 className="font-display text-2xl font-bold">Detalle de venta</h2></div><Button variant="ghost" onClick={()=>setDetalleId(null)}>Cerrar</Button></div><div className="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-6">{[["Ingreso bruto",detalle.data.ingresoBruto],["Gastos directos",detalle.data.gastosDirectos],["Ingreso neto",detalle.data.ingresoNeto],["Costo acumulado",detalle.data.costoAcumulado],["Margen real",detalle.data.margenReal],["Margen %",detalle.data.ingresoNeto>0?detalle.data.margenReal/detalle.data.ingresoNeto*100:null]].map(([l,v])=><div key={String(l)} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800"><small>{l}</small><b className="block">{v==null?"—":l==="Margen %"?`${Number(v).toFixed(2)}%`:formatearMoneda(Number(v),moneda,cultura)}</b></div>)}</div><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[1200px] text-left text-sm"><thead><tr><th>Animal</th><th>Grupo</th><th>Modalidad</th><th>Peso</th><th>Precio</th><th>Bruto</th><th>Gastos</th><th>Neto</th><th>Costo</th><th>Margen real</th><th>Margen %</th></tr></thead><tbody>{detalle.data.detalles.map(x=><tr key={x.animalId} className="border-t"><td className="py-3">{x.codigoAnimal}</td><td>{x.grupoProductivo??"Sin grupo"}</td><td>{x.modalidad}</td><td>{x.modalidad==="PorLibra"?(x.pesoLibras==null?"Histórico sin peso de venta":`${x.pesoLibras.toFixed(2)} lb`):x.pesoLibras?.toFixed(2)??"—"}</td><td>{formatearMoneda(x.precioUnitario,moneda,cultura)}{x.modalidad==="PorLibra"?"/lb":""}</td><td>{formatearMoneda(x.precioBruto,moneda,cultura)}</td><td>{formatearMoneda(x.gastosDirectos,moneda,cultura)}</td><td>{formatearMoneda(x.ingresoNeto,moneda,cultura)}</td><td>{formatearMoneda(x.costoAcumuladoReal,moneda,cultura)}</td><td>{formatearMoneda(x.margenReal,moneda,cultura)}</td><td>{x.porcentajeMargenReal?.toFixed(2)??"—"}%</td></tr>)}</tbody></table></div></Card>}
+  </>;
 }
