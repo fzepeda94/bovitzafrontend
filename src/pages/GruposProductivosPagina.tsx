@@ -5,6 +5,7 @@ import { notify, requestConfirmation } from "../lib/feedback";
 import { Button, Card, Input, Pagination, Select } from "../components/ui";
 import { PageHeader } from "../components/Page";
 import type { PagedResult } from "../types";
+import { formatearMoneda, useMonedaTenant } from "../lib/moneda";
 
 interface Grupo {
   id: string;
@@ -47,6 +48,21 @@ interface Movimiento {
 interface DetalleGrupo extends Grupo {
   movimientos: Movimiento[];
 }
+interface MetricaEngorda {
+  historialGrupoId: string; animalId: string; codigoAnimal: string; arete: string | null;
+  fechaIngresoGrupo: string; fechaSalidaGrupo: string | null; diasEnGrupo: number;
+  pesoInicialLibras: number | null; fechaPesoInicial: string | null;
+  pesoActualLibras: number | null; fechaPesoActual: string | null;
+  gananciaLibras: number | null; diasEntrePesajes: number | null; gmdLibrasDia: number | null;
+  costoAcumuladoAnimal: number; costoEtapaEngorda: number; costoEntrePesajes: number;
+  costoPorLibraGanada: number | null; porcentajeMeta: number | null; estadoGmd: string;
+}
+interface PaginaEngorda {
+  grupoId: string; codigo: string; nombre: string; fechaCorte: string;
+  pesoObjetivoLibras: number | null; gananciaDiariaObjetivoLibras: number | null;
+  resumen: { cantidadAnimales: number; pesoActualPromedio: number | null; gananciaTotalLibras: number; gmdPromedio: number | null; costoEtapaTotal: number; costoPromedioPorLibraGanada: number | null };
+  items: MetricaEngorda[]; total: number; page: number; pageSize: number;
+}
 const tipos = [
   ["Cria", "Cría"],
   ["RecriaDesarrollo", "Recría / desarrollo"],
@@ -57,6 +73,7 @@ const tipos = [
 const nombreTipo = (tipo: string) => tipos.find((x) => x[0] === tipo)?.[1] ?? tipo;
 
 export function GruposProductivosPagina() {
+  const { moneda, cultura } = useMonedaTenant();
   const client = useQueryClient();
   const [search, setSearch] = useState("");
   const [tipo, setTipo] = useState("");
@@ -76,6 +93,10 @@ export function GruposProductivosPagina() {
   const [buscarDestino, setBuscarDestino] = useState("");
   const [paginaDestino, setPaginaDestino] = useState(1);
   const [destinoSeleccionado, setDestinoSeleccionado] = useState<Grupo | null>(null);
+  const [fechaCorteEngorda, setFechaCorteEngorda] = useState(new Date().toISOString().slice(0, 10));
+  const [buscarEngorda, setBuscarEngorda] = useState("");
+  const [soloActualesEngorda, setSoloActualesEngorda] = useState(false);
+  const [paginaEngorda, setPaginaEngorda] = useState(1);
   const grupos = useQuery({
     queryKey: ["grupos-productivos", search, tipo, estado, page],
     queryFn: () => api<PagedResult<Grupo>>("/grupos-productivos?search=" + encodeURIComponent(search) + "&tipo=" + tipo + "&estado=" + estado + "&page=" + page + "&pageSize=10"),
@@ -88,6 +109,12 @@ export function GruposProductivosPagina() {
     queryKey: ["grupo-productivo", detalleId],
     enabled: !!detalleId,
     queryFn: () => api<DetalleGrupo>("/grupos-productivos/" + detalleId),
+  });
+  const rutaEngorda = (pagina: number, tamano: number) => `/grupos-productivos/${detalleId}/engorda?fechaCorte=${fechaCorteEngorda}&search=${encodeURIComponent(buscarEngorda)}&soloActuales=${soloActualesEngorda}&page=${pagina}&pageSize=${tamano}`;
+  const engorda = useQuery({
+    queryKey: ["grupo-engorda", detalleId, fechaCorteEngorda, buscarEngorda, soloActualesEngorda, paginaEngorda],
+    enabled: !!detalleId && detalle.data?.tipo === "Engorda",
+    queryFn: () => api<PaginaEngorda>(rutaEngorda(paginaEngorda, 10)),
   });
   const miembros = useQuery({
     queryKey: ["grupo-miembros", detalleId, paginaAnimal, buscarAnimal],
@@ -234,6 +261,24 @@ export function GruposProductivosPagina() {
         message: error instanceof Error ? error.message : "Ocurrió un error.",
       });
     }
+  };
+  const guardarMetas = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!detalleId) return;
+    const datos = new FormData(event.currentTarget);
+    try {
+      await api(`/grupos-productivos/${detalleId}/metas-engorda`, { method: "PUT", body: JSON.stringify({ pesoObjetivoLibras: datos.get("pesoObjetivoLibras") ? Number(datos.get("pesoObjetivoLibras")) : null, gananciaDiariaObjetivoLibras: datos.get("gananciaDiariaObjetivoLibras") ? Number(datos.get("gananciaDiariaObjetivoLibras")) : null }) });
+      await engorda.refetch();
+      notify({ tone: "success", title: "Metas actualizadas", message: "Las metas de engorda fueron guardadas." });
+    } catch (error) { notify({ tone: "error", title: "No se guardaron las metas", message: error instanceof Error ? error.message : "Error inesperado." }); }
+  };
+  const exportarEngorda = async () => {
+    const filas: MetricaEngorda[] = []; let pagina = 1; let total = 0;
+    do { const resultado = await api<PaginaEngorda>(rutaEngorda(pagina, 100)); filas.push(...resultado.items); total = resultado.total; pagina++; } while (filas.length < total);
+    const escapar = (valor: unknown) => `"${String(valor ?? "").replaceAll('"', '""')}"`;
+    const columnas = ["Animal", "Arete", "Ingreso", "Salida", "Días grupo", "Peso inicial lb", "Peso actual lb", "Ganancia lb", "GMD lb/día", "Costo etapa", "Costo por lb", "Estado meta GMD"];
+    const contenido = [columnas, ...filas.map((x) => [x.codigoAnimal, x.arete, x.fechaIngresoGrupo.slice(0, 10), x.fechaSalidaGrupo?.slice(0, 10), x.diasEnGrupo, x.pesoInicialLibras, x.pesoActualLibras, x.gananciaLibras, x.gmdLibrasDia, x.costoEtapaEngorda, x.costoPorLibraGanada, x.estadoGmd])].map((fila) => fila.map(escapar).join(",")).join("\r\n");
+    const enlace = document.createElement("a"); enlace.href = URL.createObjectURL(new Blob(["\ufeff" + contenido], { type: "text/csv;charset=utf-8" })); enlace.download = `engorda-${detalle.data?.codigo ?? "grupo"}-${fechaCorteEngorda}.csv`; enlace.click(); URL.revokeObjectURL(enlace.href);
   };
   return (
     <>
@@ -405,6 +450,35 @@ export function GruposProductivosPagina() {
               </span>
             ))}
           </div>
+          {detalle.data.tipo === "Engorda" && (
+            <div className="mt-5 grid gap-5">
+              <form key={`${engorda.data?.pesoObjetivoLibras ?? ""}-${engorda.data?.gananciaDiariaObjetivoLibras ?? ""}`} className="grid gap-3 rounded-2xl border p-4 md:grid-cols-3" onSubmit={(event) => void guardarMetas(event)}>
+                <Input name="pesoObjetivoLibras" label="Peso objetivo (lb)" type="number" min="0.01" step="0.01" defaultValue={engorda.data?.pesoObjetivoLibras ?? ""} />
+                <Input name="gananciaDiariaObjetivoLibras" label="GMD objetivo (lb/día)" type="number" min="0.01" step="0.01" defaultValue={engorda.data?.gananciaDiariaObjetivoLibras ?? ""} />
+                <div className="flex items-end"><Button type="submit">Guardar metas</Button></div>
+              </form>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <Card><p className="text-xs text-slate-500">Animales</p><strong>{engorda.data?.resumen.cantidadAnimales ?? 0}</strong></Card>
+                <Card><p className="text-xs text-slate-500">Peso actual promedio</p><strong>{engorda.data?.resumen.pesoActualPromedio?.toFixed(2) ?? "—"} lb</strong></Card>
+                <Card><p className="text-xs text-slate-500">Ganancia</p><strong>{engorda.data?.resumen.gananciaTotalLibras.toFixed(2) ?? "0.00"} lb</strong></Card>
+                <Card><p className="text-xs text-slate-500">GMD promedio</p><strong>{engorda.data?.resumen.gmdPromedio?.toFixed(3) ?? "—"} lb/día</strong></Card>
+                <Card><p className="text-xs text-slate-500">Costo etapa</p><strong>{formatearMoneda(engorda.data?.resumen.costoEtapaTotal ?? 0, moneda, cultura)}</strong></Card>
+              </div>
+              <div className="grid gap-3 md:grid-cols-4">
+                <Input label="Fecha de corte" type="date" value={fechaCorteEngorda} onChange={(e) => { setFechaCorteEngorda(e.target.value); setPaginaEngorda(1); }} />
+                <Input label="Buscar animal" value={buscarEngorda} onChange={(e) => { setBuscarEngorda(e.target.value); setPaginaEngorda(1); }} />
+                <label className="flex items-center gap-2 pt-7 text-sm"><input type="checkbox" checked={soloActualesEngorda} onChange={(e) => { setSoloActualesEngorda(e.target.checked); setPaginaEngorda(1); }} /> Sólo miembros actuales</label>
+                <div className="flex items-end"><Button variant="secondary" onClick={() => void exportarEngorda()}>Exportar CSV</Button></div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-2">Animal</th><th>Período</th><th>Peso inicial</th><th>Peso actual</th><th>Ganancia</th><th>GMD</th><th>Costo etapa</th><th>Costo/lb</th><th>Meta</th></tr></thead>
+                  <tbody>{engorda.data?.items.map((x) => <tr key={x.historialGrupoId} className="border-b"><td className="p-2 font-semibold">{x.codigoAnimal}<small className="block font-normal text-slate-500">Arete {x.arete ?? "—"}</small></td><td>{x.fechaIngresoGrupo.slice(0,10)} · {x.fechaSalidaGrupo?.slice(0,10) ?? "Actual"}</td><td>{x.pesoInicialLibras?.toFixed(2) ?? "—"}</td><td>{x.pesoActualLibras?.toFixed(2) ?? "—"}</td><td>{x.gananciaLibras?.toFixed(2) ?? "—"}</td><td>{x.gmdLibrasDia?.toFixed(3) ?? "—"}</td><td>{formatearMoneda(x.costoEtapaEngorda, moneda, cultura)}</td><td>{x.costoPorLibraGanada == null ? "—" : formatearMoneda(x.costoPorLibraGanada, moneda, cultura)}</td><td>{x.estadoGmd}</td></tr>)}</tbody>
+                </table>
+                {!engorda.isLoading && engorda.data?.items.length === 0 && <p className="p-5 text-center text-sm text-slate-500">No hay ciclos de engorda para los filtros seleccionados.</p>}
+              </div>
+              <Pagination page={paginaEngorda} totalPages={Math.max(1, Math.ceil((engorda.data?.total ?? 0) / 10))} totalItems={engorda.data?.total ?? 0} pageSize={10} onPageChange={setPaginaEngorda} label="Rendimiento de engorda" />
+            </div>
+          )}
           {accion && (
             <div className="mt-5 rounded-2xl border p-4">
               <h3 className="font-bold">{accion === "Asignacion" ? "Asignar animales" : accion === "Traslado" ? "Trasladar animales" : "Retirar animales"}</h3>

@@ -32,6 +32,7 @@ const tabs = [
 ] as const;
 type Tab = (typeof tabs)[number];
 interface HistorialGrupo { id:string;grupoProductivoId:string;codigo:string;grupo:string;tipo:string;fechaInicio:string;fechaFin:string|null;motivoIngreso:string|null;motivoSalida:string|null;movimientoIngresoId:string|null;movimientoSalidaId:string|null }
+interface CicloEngorda { historialGrupoId:string;grupoCodigo:string;grupoNombre:string;fechaIngresoGrupo:string;fechaSalidaGrupo:string|null;diasEnGrupo:number;pesoInicialLibras:number|null;fechaPesoInicial:string|null;pesoActualLibras:number|null;fechaUltimoPeso:string|null;gananciaLibras:number|null;diasEntrePesajes:number|null;gmdLibrasDia:number|null;costoAcumuladoAnimal:number;costoEtapaEngorda:number;costoEntrePesajes:number;costoPorLibraGanada:number|null;porcentajeMeta:number|null;estadoGmd:string }
 
 const date = (value?: string | null) =>
   value ? new Date(value).toLocaleDateString("es-GT") : "No registrado";
@@ -103,6 +104,7 @@ export function AnimalDetailPage() {
     queryFn: () => api<PagedResult<Animal>>(`/animales/padres-posibles?page=1&pageSize=50&search=${encodeURIComponent(busquedaPadre)}`),
   });
   const gruposQuery = useQuery({queryKey:["animal-groups",id],queryFn:()=>api<HistorialGrupo[]>(`/grupos-productivos/animales/${id}/historial`),enabled:!!id});
+  const engordaQuery = useQuery({queryKey:["animal-engorda",id],queryFn:()=>api<CicloEngorda[]>(`/grupos-productivos/animales/${id}/engorda`),enabled:!!id});
   const animal = animalQuery.data;
   const record = recordQuery.data;
   const timeline = useMemo(
@@ -837,7 +839,10 @@ export function AnimalDetailPage() {
             )}
           </div>
         )}
-        {tab === "Grupos productivos"&&<div className="grid gap-2">{gruposQuery.data?.map(x=><Field key={x.id} label={`${date(x.fechaInicio)}${x.fechaFin?` a ${date(x.fechaFin)}`:" · grupo actual"}`}>{x.codigo} · {x.grupo} · {x.tipo}{x.motivoIngreso?` · ingreso: ${x.motivoIngreso}`:""}{x.motivoSalida?` · salida: ${x.motivoSalida}`:""}</Field>)}{gruposQuery.data?.length===0&&<Empty>Sin historial de grupos productivos.</Empty>}</div>}
+        {tab === "Grupos productivos"&&<div className="grid gap-5">
+          <div className="grid gap-2">{gruposQuery.data?.map(x=><Field key={x.id} label={`${date(x.fechaInicio)}${x.fechaFin?` a ${date(x.fechaFin)}`:" · grupo actual"}`}>{x.codigo} · {x.grupo} · {x.tipo}{x.motivoIngreso?` · ingreso: ${x.motivoIngreso}`:""}{x.motivoSalida?` · salida: ${x.motivoSalida}`:""}</Field>)}{gruposQuery.data?.length===0&&<Empty>Sin historial de grupos productivos.</Empty>}</div>
+          {engordaQuery.data && engordaQuery.data.length > 0 && <div><h3 className="mb-3 font-semibold">Rendimiento de engorda</h3><div className="grid gap-3">{engordaQuery.data.map(x=><div key={x.historialGrupoId} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><div className="mb-3 flex flex-wrap justify-between gap-2"><strong>{x.grupoCodigo} · {x.grupoNombre}</strong><span className="text-sm text-slate-500">{date(x.fechaIngresoGrupo)} a {x.fechaSalidaGrupo?date(x.fechaSalidaGrupo):"actual"} · {x.diasEnGrupo} días</span></div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"><Field label="Peso inicial">{x.pesoInicialLibras == null?"—":`${x.pesoInicialLibras.toFixed(2)} lb`}</Field><Field label="Peso final / actual">{x.pesoActualLibras == null?"—":`${x.pesoActualLibras.toFixed(2)} lb`}</Field><Field label="Ganancia y GMD">{x.gananciaLibras == null?"—":`${x.gananciaLibras.toFixed(2)} lb · ${x.gmdLibrasDia?.toFixed(3) ?? "—"} lb/día`}</Field><Field label="Costo etapa">{formatearMoneda(x.costoEtapaEngorda,moneda,cultura)}</Field><Field label="Costo entre pesajes">{formatearMoneda(x.costoEntrePesajes,moneda,cultura)}</Field><Field label="Costo por libra ganada">{x.costoPorLibraGanada==null?"—":formatearMoneda(x.costoPorLibraGanada,moneda,cultura)}</Field><Field label="Costo acumulado">{formatearMoneda(x.costoAcumuladoAnimal,moneda,cultura)}</Field><Field label="Estado de meta GMD">{x.estadoGmd}</Field></div></div>)}</div></div>}
+        </div>}
         {tab === "Línea de tiempo" && (
           <div className="grid gap-2">
             {timeline.map((x, index) => (
