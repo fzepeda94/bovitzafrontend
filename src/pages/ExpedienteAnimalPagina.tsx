@@ -26,10 +26,12 @@ const tabs = [
   "Salud",
   "Pesajes",
   "Ubicación",
+  "Grupos productivos",
   "Línea de tiempo",
   "Auditoría",
 ] as const;
 type Tab = (typeof tabs)[number];
+interface HistorialGrupo { id:string;grupoProductivoId:string;codigo:string;grupo:string;tipo:string;fechaInicio:string;fechaFin:string|null;motivoIngreso:string|null;motivoSalida:string|null;movimientoIngresoId:string|null;movimientoSalidaId:string|null }
 
 const date = (value?: string | null) =>
   value ? new Date(value).toLocaleDateString("es-GT") : "No registrado";
@@ -100,6 +102,7 @@ export function AnimalDetailPage() {
     queryKey: ["animals", "possible-fathers", busquedaPadre],
     queryFn: () => api<PagedResult<Animal>>(`/animales/padres-posibles?page=1&pageSize=50&search=${encodeURIComponent(busquedaPadre)}`),
   });
+  const gruposQuery = useQuery({queryKey:["animal-groups",id],queryFn:()=>api<HistorialGrupo[]>(`/grupos-productivos/animales/${id}/historial`),enabled:!!id});
   const animal = animalQuery.data;
   const record = recordQuery.data;
   const timeline = useMemo(
@@ -134,9 +137,10 @@ export function AnimalDetailPage() {
               date: x.fecha,
               text: `${x.direccion} de inventario: ${x.tipo}`,
             })),
+            ...(gruposQuery.data??[]).flatMap(x=>[{date:x.fechaInicio,text:`Ingreso al grupo ${x.grupo}`},...(x.fechaFin?[{date:x.fechaFin,text:`Salida del grupo ${x.grupo}${x.motivoSalida?` · ${x.motivoSalida}`:""}`}]:[])]),
           ].sort((a, b) => b.date.localeCompare(a.date))
         : [],
-    [record, movementsQuery.data],
+    [record, movementsQuery.data,gruposQuery.data],
   );
 
   if (animalQuery.isLoading) return <Card>Cargando expediente…</Card>;
@@ -667,6 +671,9 @@ export function AnimalDetailPage() {
                   ? "Finca, sin potrero"
                   : "Sin ubicación"}
             </Field>
+            <Field label="Grupo productivo actual">{gruposQuery.data?.find(x=>!x.fechaFin)?.grupo??"Sin grupo"}</Field>
+            <Field label="Tipo de grupo">{gruposQuery.data?.find(x=>!x.fechaFin)?.tipo??"No aplica"}</Field>
+            <Field label="Fecha de ingreso al grupo">{date(gruposQuery.data?.find(x=>!x.fechaFin)?.fechaInicio)}</Field>
           </div>
         )}
         {tab === "Identificación" && (
@@ -830,6 +837,7 @@ export function AnimalDetailPage() {
             )}
           </div>
         )}
+        {tab === "Grupos productivos"&&<div className="grid gap-2">{gruposQuery.data?.map(x=><Field key={x.id} label={`${date(x.fechaInicio)}${x.fechaFin?` a ${date(x.fechaFin)}`:" · grupo actual"}`}>{x.codigo} · {x.grupo} · {x.tipo}{x.motivoIngreso?` · ingreso: ${x.motivoIngreso}`:""}{x.motivoSalida?` · salida: ${x.motivoSalida}`:""}</Field>)}{gruposQuery.data?.length===0&&<Empty>Sin historial de grupos productivos.</Empty>}</div>}
         {tab === "Línea de tiempo" && (
           <div className="grid gap-2">
             {timeline.map((x, index) => (

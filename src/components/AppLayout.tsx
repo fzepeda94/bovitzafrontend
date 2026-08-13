@@ -69,6 +69,11 @@ type MasterSubmenu =
 
 const topNavigation: NavigationItem[] = [
   {
+    to: '/operacion/grupos-productivos',
+    label: 'GRUPOS PRODUCTIVOS',
+    icon: Target,
+  },
+  {
     to: '/mapa-potreros',
     label: 'MAPA DE POTREROS',
     icon: Layers3,
