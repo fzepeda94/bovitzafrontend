@@ -166,7 +166,63 @@ export function MovimientosFinancierosPagina() {
     setOrigen(x.origenFondos);
     setFormulario(true);
   };
-  const exportar=()=>{const filas=movimientos.data?.items??[];const csv=["Fecha,Naturaleza,Categoría,Descripción,Monto,Origen,Estado",...filas.map(x=>[x.fecha.slice(0,10),x.naturaleza,x.categoria,x.descripcion,x.monto,x.origenFondos,x.estado].map(v=>`"${String(v).replaceAll('"','""')}"`).join(','))].join('\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const enlace=document.createElement('a');enlace.href=url;enlace.download='movimientos-financieros.csv';enlace.click();URL.revokeObjectURL(url)};
+  const exportar = async () => {
+    try {
+      const filas: Movimiento[] = [];
+      let paginaExportacion = 1;
+      let total = 0;
+
+      do {
+        const resultado = await api<PagedResult<Movimiento>>(
+          `/finanzas/movimientos?page=${paginaExportacion}&pageSize=100&search=${encodeURIComponent(search)}&fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&naturaleza=${filtroNaturaleza}&categoriaId=${filtroCategoria}&propietarioId=${filtroPropietario}`,
+        );
+        filas.push(...resultado.items);
+        total = resultado.total;
+        paginaExportacion += 1;
+
+        if (resultado.items.length === 0) break;
+      } while (filas.length < total);
+
+      const escaparCsv = (valor: string | number) =>
+        `"${String(valor).replaceAll('"', '""')}"`;
+      const csv = [
+        [
+          "Fecha",
+          "Naturaleza",
+          "Categoría",
+          "Descripción",
+          "Monto",
+          "Origen",
+          "Estado",
+        ].map(escaparCsv).join(","),
+        ...filas.map((x) =>
+          [
+            x.fecha.slice(0, 10),
+            x.naturaleza,
+            x.categoria,
+            x.descripcion,
+            x.monto,
+            x.origenFondos,
+            x.estado,
+          ].map(escaparCsv).join(","),
+        ),
+      ].join("\r\n");
+      const url = URL.createObjectURL(
+        new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }),
+      );
+      const enlace = document.createElement("a");
+      enlace.href = url;
+      enlace.download = "movimientos-financieros.csv";
+      enlace.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "No se pudo exportar",
+        message: error instanceof Error ? error.message : "Ocurrió un error.",
+      });
+    }
+  };
   return (
     <>
       <PageHeader
@@ -175,7 +231,7 @@ export function MovimientosFinancierosPagina() {
         description="Distingue resultado ganadero, flujo, inversión, capital y financiamiento."
         actions={
           <>
-            <Button variant="secondary" onClick={exportar}>
+            <Button variant="secondary" onClick={() => void exportar()}>
               <Download size={17} />
               Exportar
             </Button>
@@ -400,12 +456,12 @@ export function MovimientosFinancierosPagina() {
                   <td>{x.estado}</td>
                   <td>
                     <div className="flex gap-1">
-                      {!x.procesoOrigen&&<IconButton
+                      <IconButton
                         label="Ver detalle"
                         onClick={() => setDetalle(x)}
                       >
                         <Eye size={17} />
-                      </IconButton>}
+                      </IconButton>
                       {!x.procesoOrigen&&<IconButton
                         tone="edit"
                         label="Editar"
@@ -413,13 +469,13 @@ export function MovimientosFinancierosPagina() {
                       >
                         <Pencil size={17} />
                       </IconButton>}
-                      <IconButton
+                      {!x.procesoOrigen&&<IconButton
                         tone="danger"
                         label="Desactivar"
                         onClick={() => void desactivar(x)}
                       >
                         <Power size={17} />
-                      </IconButton>
+                      </IconButton>}
                     </div>
                   </td>
                 </tr>
