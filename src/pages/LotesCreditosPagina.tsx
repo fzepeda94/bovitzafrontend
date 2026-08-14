@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type { Entity, PagedResult } from "../types";
@@ -69,6 +70,7 @@ interface DestinoCredito {
 interface CategoriaFinancieraOpcion {id:string;codigo:string;nombre:string;naturaleza:string}
 
 export function LotsPage() {
+  const navigate = useNavigate();
   const { moneda, cultura } = useMonedaTenant();
   const client = useQueryClient();
   const [formulario, setFormulario] = useState(false);
@@ -515,6 +517,9 @@ export function LotsPage() {
                 </p>
               </div>
               <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => navigate(`/finanzas/creditos/${c.id}`)}>
+                  Ver crédito / servicio de deuda
+                </Button>
                 {c.estado === "Borrador" && (
                   <>
                     <Button

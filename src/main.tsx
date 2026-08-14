@@ -16,6 +16,7 @@ const ExpedienteAnimalPagina=lazy(()=>import('./pages/ExpedienteAnimalPagina').t
 const MapaPotrerosPagina=lazy(()=>import('./pages/MapaPotrerosPagina').then(x=>({default:x.MapaPotrerosPagina})))
 const GruposProductivosPagina=lazy(()=>import('./pages/GruposProductivosPagina').then(x=>({default:x.GruposProductivosPagina})))
 const LotesCreditosPagina=lazy(()=>import('./pages/LotesCreditosPagina').then(x=>({default:x.LotsPage})))
+const CreditoDetallePagina=lazy(()=>import('./pages/CreditoDetallePagina').then(x=>({default:x.CreditoDetallePagina})))
 const ComprasGanadoPagina=lazy(()=>import('./pages/ComprasGanadoPagina').then(x=>({default:x.ComprasGanadoPagina})))
 const VentasGanadoPagina=lazy(()=>import('./pages/VentasGanadoPagina').then(x=>({default:x.VentasGanadoPagina})))
 const MovimientosFinancierosPagina=lazy(()=>import('./pages/MovimientosFinancierosPagina').then(x=>({default:x.MovimientosFinancierosPagina})))
@@ -42,7 +43,7 @@ const router=createBrowserRouter([{element:<GuestRoute/>,children:[{path:'/login
   {path:'animales',element:cargar(<InventarioBovinoPagina/>)},{path:'animales/nuevo',element:cargar(<RegistroAnimalPagina/>)},{path:'animales/:id',element:cargar(<ExpedienteAnimalPagina/>)},
   {path:'mapa-potreros',element:cargar(<MapaPotrerosPagina/>)},
   {path:'operacion/grupos-productivos',element:cargar(<GruposProductivosPagina/>)},
-  {path:'finanzas/compras-ganado',element:cargar(<ComprasGanadoPagina/>)},{path:'finanzas/ventas-ganado',element:cargar(<VentasGanadoPagina/>)},{path:'finanzas/movimientos',element:cargar(<MovimientosFinancierosPagina/>)},{path:'finanzas/categorias',element:cargar(<CategoriasFinancierasPagina/>)},{path:'lotes',element:cargar(<LotesCreditosPagina/>)},
+  {path:'finanzas/compras-ganado',element:cargar(<ComprasGanadoPagina/>)},{path:'finanzas/ventas-ganado',element:cargar(<VentasGanadoPagina/>)},{path:'finanzas/movimientos',element:cargar(<MovimientosFinancierosPagina/>)},{path:'finanzas/categorias',element:cargar(<CategoriasFinancierasPagina/>)},{path:'lotes',element:cargar(<LotesCreditosPagina/>)},{path:'finanzas/creditos/:id',element:cargar(<CreditoDetallePagina/>)},
   {path:'datos-maestros/entidades',element:cargar(<EntidadesPagina/>)},{path:'datos-maestros/fincas',element:cargar(<FincasPagina/>)},{path:'datos-maestros/potreros',element:cargar(<PotrerosPagina/>)},{path:'datos-maestros/catalogos/:tipo',element:cargar(<CatalogosMaestrosPagina/>)},{path:'datos-maestros/catalogos',element:cargar(<CatalogosMaestrosPagina/>)},
   {path:'salud',element:cargar(<SaludPesajesPagina/>)},
   {path:'reportes/inventario',element:cargar(<ReporteInventarioPagina/>)},
