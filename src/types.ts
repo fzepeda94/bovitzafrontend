@@ -9,6 +9,7 @@ export interface AuthResponse {
   tenantId: string
   displayName: string
   roles: string[]
+  permisos: string[]
 }
 
 export interface PagedResult<T> {

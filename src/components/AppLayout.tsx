@@ -340,6 +340,15 @@ export function AppLayout() {
   } = useAuth()
 
   const navigate = useNavigate()
+  const puede = (...permisos: string[]) =>
+    permisos.some(permiso => session?.permisos?.includes(permiso))
+  const puedeNavegar = (ruta: string) => {
+    if (ruta.startsWith('/operacion/grupos-productivos')) return puede('GRUPOS.CONSULTAR')
+    if (ruta.startsWith('/salud')) return puede('SALUD.CONSULTAR', 'PESAJES.CONSULTAR')
+    if (ruta.startsWith('/reportes/gerenciales')) return puede('REPORTES.CONSULTAR')
+    if (ruta.startsWith('/reportes/inventario')) return puede('REPORTES.INVENTARIO')
+    return puede('ANIMALES.CONSULTAR')
+  }
   const location = useLocation()
 
   const [open, setOpen] =
@@ -801,7 +810,7 @@ export function AppLayout() {
           className="flex-1 space-y-1 overflow-y-auto p-3"
           aria-label="Navegación principal"
         >
-          <div className="pt-1">
+          {puede('MAESTROS.CONSULTAR') && <div className="pt-1">
             {groupButton(
               'DATOS MAESTROS',
               Database,
@@ -906,9 +915,9 @@ export function AppLayout() {
                 )}
               </div>
             )}
-          </div>
+          </div>}
 
-          <div className="pt-2">
+          {puede('ANIMALES.CONSULTAR') && <div className="pt-2">
             {groupButton(
               'ANIMALES BOVINOS',
               Beef,
@@ -928,7 +937,7 @@ export function AppLayout() {
                     : ''
                 }`}
               >
-                {animalNavigation.map(
+                {animalNavigation.filter(item => item.to !== '/animales/nuevo' || puede('CARGA_INICIAL.REGISTRAR')).map(
                   ({
                     to,
                     label,
@@ -957,9 +966,9 @@ export function AppLayout() {
                 )}
               </div>
             )}
-          </div>
+          </div>}
 
-          {topNavigation.map(
+          {topNavigation.filter(item => puedeNavegar(item.to)).map(
             ({
               to,
               label,
@@ -994,7 +1003,7 @@ export function AppLayout() {
             ),
           )}
 
-          <div className="pt-2">
+          {puede('TRANSFERENCIAS.CONSULTAR') && <div className="pt-2">
             {groupButton(
               'TRANSFERENCIAS',
               RefreshCw,
@@ -1012,9 +1021,9 @@ export function AppLayout() {
                 ))}
               </div>
             )}
-          </div>
+          </div>}
 
-          <div className="pt-2">
+          {puede('FINANZAS.CONSULTAR') && <div className="pt-2">
             {groupButton(
               'FINANZAS',
               CircleDollarSign,
@@ -1059,11 +1068,9 @@ export function AppLayout() {
                 )}
               </div>
             )}
-          </div>
+          </div>}
 
-          {session?.roles.includes(
-            'Administrador',
-          ) && (
+          {session?.permisos?.includes('SEGURIDAD.ADMINISTRAR') && (
             <div className="pt-2">
               {groupButton(
                 'SEGURIDAD',
@@ -1115,9 +1122,7 @@ export function AppLayout() {
             </div>
           )}
 
-          {session?.roles.includes(
-            'Administrador',
-          ) &&
+          {session?.permisos?.includes('SEGURIDAD.ADMINISTRAR') &&
             administrationNavigation.map(
               ({
                 to,
