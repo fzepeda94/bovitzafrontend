@@ -28,6 +28,7 @@ type Resumen = {
   cuotasPagadas: number;
   cuotasPendientes: number;
   cuotasVencidas: number;
+  cuotasCanceladas: number;
 };
 type Cuota = {
   id: string;
@@ -52,6 +53,7 @@ type Pago = {
   fechaPago: string;
   documento: string | null;
   metodoPago: string | null;
+  observaciones: string | null;
   capitalPagado: number;
   interesPagado: number;
   seguroPagado: number;
@@ -108,6 +110,18 @@ export function CreditoDetallePagina() {
   const [mostrarPago, setMostrarPago] = useState(false);
   const [fuentes, setFuentes] = useState<FuenteForm[]>([cero()]);
   const [detalle, setDetalle] = useState<string | null>(null);
+  const [cuotaEditando, setCuotaEditando] = useState<Cuota | null>(null);
+  const [pagoEditando, setPagoEditando] = useState<Pago | null>(null);
+  const [paginaPagos, setPaginaPagos] = useState(1);
+  const [motivoReversion, setMotivoReversion] = useState("");
+  const [pagoComponentes, setPagoComponentes] = useState({
+    capital: 0,
+    interes: 0,
+    seguro: 0,
+    comision: 0,
+    mora: 0,
+    otrosCargos: 0,
+  });
   const resumen = useQuery({
     queryKey: ["deuda", id],
     queryFn: () => api<Resumen>(`/creditos/${id}/servicio-deuda`),
@@ -119,8 +133,9 @@ export function CreditoDetallePagina() {
     enabled: !!id,
   });
   const pagos = useQuery({
-    queryKey: ["deuda-pagos", id],
-    queryFn: () => api<Pagos>(`/creditos/${id}/pagos?page=1&pageSize=100`),
+    queryKey: ["deuda-pagos", id, paginaPagos],
+    queryFn: () =>
+      api<Pagos>(`/creditos/${id}/pagos?page=${paginaPagos}&pageSize=10`),
     enabled: !!id,
   });
   const entidades = useQuery({
@@ -157,22 +172,26 @@ export function CreditoDetallePagina() {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     try {
-      await api(`/creditos/${id}/cuotas`, {
-        method: "POST",
-        body: JSON.stringify({
-          numeroCuota: num(f, "numeroCuota"),
-          fechaProgramada: f.get("fechaProgramada"),
-          capital: f.get("capital") ? num(f, "capital") : null,
-          interes: f.get("interes") ? num(f, "interes") : null,
-          seguro: num(f, "seguro"),
-          comision: num(f, "comision"),
-          mora: num(f, "mora"),
-          otrosCargos: num(f, "otrosCargos"),
-          totalProgramado: num(f, "totalProgramado"),
-          saldo: f.get("saldo") ? num(f, "saldo") : null,
-        }),
-      });
+      await api(
+        `/creditos/${id}/cuotas${cuotaEditando ? `/${cuotaEditando.id}` : ""}`,
+        {
+          method: cuotaEditando ? "PUT" : "POST",
+          body: JSON.stringify({
+            numeroCuota: num(f, "numeroCuota"),
+            fechaProgramada: f.get("fechaProgramada"),
+            capital: f.get("capital") ? num(f, "capital") : null,
+            interes: f.get("interes") ? num(f, "interes") : null,
+            seguro: num(f, "seguro"),
+            comision: num(f, "comision"),
+            mora: num(f, "mora"),
+            otrosCargos: num(f, "otrosCargos"),
+            totalProgramado: num(f, "totalProgramado"),
+            saldo: f.get("saldo") ? num(f, "saldo") : null,
+          }),
+        },
+      );
       setMostrarCuota(false);
+      setCuotaEditando(null);
       await refrescar();
     } catch (error) {
       notify({
@@ -203,12 +222,24 @@ export function CreditoDetallePagina() {
       })),
     };
     try {
-      await api(`/creditos/${id}/pagos`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
+      await api(
+        `/creditos/${id}/pagos${pagoEditando ? `/${pagoEditando.id}` : ""}`,
+        {
+          method: pagoEditando ? "PUT" : "POST",
+          body: JSON.stringify(body),
+        },
+      );
       setMostrarPago(false);
       setFuentes([cero()]);
+      setPagoEditando(null);
+      setPagoComponentes({
+        capital: 0,
+        interes: 0,
+        seguro: 0,
+        comision: 0,
+        mora: 0,
+        otrosCargos: 0,
+      });
       await refrescar();
     } catch (error) {
       notify({
@@ -255,6 +286,42 @@ export function CreditoDetallePagina() {
       ),
     [fuentes],
   );
+  const totalComponentes = Object.values(pagoComponentes).reduce(
+    (a, b) => a + b,
+    0,
+  );
+  const totalFuentes = Object.values(componentes).reduce((a, b) => a + b, 0);
+  const conciliado =
+    (Object.keys(pagoComponentes) as (keyof typeof pagoComponentes)[]).every(
+      (k) => Math.abs(pagoComponentes[k] - componentes[k]) <= 0.0001,
+    ) && totalComponentes > 0;
+  const editarPago = async (pago: Pago) => {
+    const d = await api<{ pago: Pago; fuentes: Fuente[] }>(
+      `/creditos/${id}/pagos/${pago.id}`,
+    );
+    setPagoEditando(d.pago);
+    setPagoComponentes({
+      capital: d.pago.capitalPagado,
+      interes: d.pago.interesPagado,
+      seguro: d.pago.seguroPagado,
+      comision: d.pago.comisionPagada,
+      mora: d.pago.moraPagada,
+      otrosCargos: d.pago.otrosCargosPagados,
+    });
+    setFuentes(
+      d.fuentes.map((x) => ({
+        origenFondos: x.origenFondos as Origen,
+        propietarioFuenteId: x.propietarioFuenteId ?? "",
+        capital: x.capital,
+        interes: x.interes,
+        seguro: x.seguro,
+        comision: x.comision,
+        mora: x.mora,
+        otrosCargos: x.otrosCargos,
+      })),
+    );
+    setMostrarPago(true);
+  };
   return (
     <>
       <PageHeader
@@ -287,11 +354,34 @@ export function CreditoDetallePagina() {
             ))}
           </div>
           <Card>
-            <p>
-              <b>{r.entidadFinanciera}</b> · Estado: {r.estado} · Cuotas:{" "}
-              {r.cuotasPagadas} pagadas, {r.cuotasPendientes} pendientes,{" "}
-              {r.cuotasVencidas} vencidas.
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p>
+                <b>{r.entidadFinanciera}</b> · Estado: {r.estado} · Cuotas:{" "}
+                {r.cuotasPagadas} pagadas, {r.cuotasPendientes} pendientes,{" "}
+                {r.cuotasVencidas} vencidas, {r.cuotasCanceladas} canceladas.
+              </p>
+              {r.estado === "Vigente" && (
+                <Button
+                  disabled={r.saldoPrincipal > 0.0001}
+                  onClick={async () => {
+                    if (
+                      await requestConfirmation({
+                        title: "Cerrar crédito",
+                        message:
+                          "¿Confirma que el principal y las cuotas están completamente atendidos?",
+                        confirmLabel: "Cerrar crédito",
+                        cancelLabel: "Volver",
+                      })
+                    ) {
+                      await api(`/creditos/${id}/cerrar`, { method: "POST" });
+                      await refrescar();
+                    }
+                  }}
+                >
+                  Cerrar crédito
+                </Button>
+              )}
+            </div>
           </Card>
         </>
       )}
@@ -317,31 +407,87 @@ export function CreditoDetallePagina() {
                 Registre los valores según el plan de pagos proporcionado por la
                 entidad financiera.
               </p>
-              <Button onClick={() => setMostrarCuota((x) => !x)}>
+              <Button
+                onClick={() => {
+                  setCuotaEditando(null);
+                  setMostrarCuota((x) => !x);
+                }}
+              >
                 Registrar cuota
               </Button>
             </div>
             {mostrarCuota && (
               <form
+                key={cuotaEditando?.id ?? "nueva"}
                 className="mt-4 grid gap-3 md:grid-cols-4"
                 onSubmit={guardarCuota}
               >
-                <Campo n="numeroCuota" l="#" tipo="number" requerido />
-                <Campo n="fechaProgramada" l="Fecha" tipo="date" requerido />
-                <Campo n="capital" l="Capital" tipo="number" />
-                <Campo n="interes" l="Interés" tipo="number" />
-                <Campo n="seguro" l="Seguro" tipo="number" />
-                <Campo n="comision" l="Comisión" tipo="number" />
-                <Campo n="mora" l="Mora" tipo="number" />
-                <Campo n="otrosCargos" l="Otros" tipo="number" />
+                <Campo
+                  n="numeroCuota"
+                  l="#"
+                  tipo="number"
+                  requerido
+                  valor={cuotaEditando?.numeroCuota}
+                />
+                <Campo
+                  n="fechaProgramada"
+                  l="Fecha"
+                  tipo="date"
+                  requerido
+                  valor={cuotaEditando?.fechaProgramada.slice(0, 10)}
+                />
+                <Campo
+                  n="capital"
+                  l="Capital"
+                  tipo="number"
+                  valor={cuotaEditando?.capital ?? undefined}
+                />
+                <Campo
+                  n="interes"
+                  l="Interés"
+                  tipo="number"
+                  valor={cuotaEditando?.interes ?? undefined}
+                />
+                <Campo
+                  n="seguro"
+                  l="Seguro"
+                  tipo="number"
+                  valor={cuotaEditando?.seguro}
+                />
+                <Campo
+                  n="comision"
+                  l="Comisión"
+                  tipo="number"
+                  valor={cuotaEditando?.comision}
+                />
+                <Campo
+                  n="mora"
+                  l="Mora"
+                  tipo="number"
+                  valor={cuotaEditando?.mora}
+                />
+                <Campo
+                  n="otrosCargos"
+                  l="Otros"
+                  tipo="number"
+                  valor={cuotaEditando?.otrosCargos}
+                />
                 <Campo
                   n="totalProgramado"
                   l="Total programado"
                   tipo="number"
                   requerido
+                  valor={cuotaEditando?.totalProgramado}
                 />
-                <Campo n="saldo" l="Saldo informado" tipo="number" />
-                <Button type="submit">Guardar cuota</Button>
+                <Campo
+                  n="saldo"
+                  l="Saldo informado"
+                  tipo="number"
+                  valor={cuotaEditando?.saldo ?? undefined}
+                />
+                <Button type="submit">
+                  {cuotaEditando ? "Guardar cambios" : "Guardar cuota"}
+                </Button>
               </form>
             )}
           </Card>
@@ -360,6 +506,7 @@ export function CreditoDetallePagina() {
                 "Total pagado",
                 "Saldo cuota",
                 "Estado",
+                "Acciones",
               ]}
               filas={(cuotas.data ?? []).map((x) => [
                 x.numeroCuota,
@@ -374,6 +521,42 @@ export function CreditoDetallePagina() {
                 dinero(x.totalPagado),
                 dinero(x.saldoCuota),
                 x.estadoCalculado,
+                x.estadoCalculado !== "Cancelada" && x.totalPagado === 0 ? (
+                  <span className="flex gap-2" key={x.id}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setCuotaEditando(x);
+                        setMostrarCuota(true);
+                      }}
+                    >
+                      Editar
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={async () => {
+                        if (
+                          await requestConfirmation({
+                            title: "Cancelar cuota",
+                            message:
+                              "La cuota seguirá visible en el historial.",
+                            confirmLabel: "Cancelar cuota",
+                            cancelLabel: "Volver",
+                          })
+                        ) {
+                          await api(`/creditos/${id}/cuotas/${x.id}/cancelar`, {
+                            method: "POST",
+                          });
+                          await refrescar();
+                        }
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                  </span>
+                ) : (
+                  "—"
+                ),
               ])}
             />
           </Card>
@@ -383,23 +566,61 @@ export function CreditoDetallePagina() {
         <>
           <Card>
             <div className="flex justify-end">
-              <Button onClick={() => setMostrarPago((x) => !x)}>
+              <Button
+                onClick={() => {
+                  setPagoEditando(null);
+                  setFuentes([cero()]);
+                  setPagoComponentes({
+                    capital: 0,
+                    interes: 0,
+                    seguro: 0,
+                    comision: 0,
+                    mora: 0,
+                    otrosCargos: 0,
+                  });
+                  setMostrarPago((x) => !x);
+                }}
+              >
                 Registrar pago
               </Button>
             </div>
             {mostrarPago && (
-              <form className="mt-4" onSubmit={guardarPago}>
+              <form
+                key={pagoEditando?.id ?? "nuevo"}
+                className="mt-4"
+                onSubmit={guardarPago}
+                onChange={(e) => {
+                  const t = e.target;
+                  if (!(t instanceof HTMLInputElement)) return;
+                  if (t.name in pagoComponentes)
+                    setPagoComponentes((x) => ({
+                      ...x,
+                      [t.name]: Number(t.value || 0),
+                    }));
+                }}
+              >
                 <div className="grid gap-3 md:grid-cols-4">
-                  <Campo n="fechaPago" l="Fecha" tipo="date" requerido />
+                  <Campo
+                    n="fechaPago"
+                    l="Fecha"
+                    tipo="date"
+                    requerido
+                    valor={pagoEditando?.fechaPago.slice(0, 10)}
+                  />
                   <label>
                     Cuota opcional
-                    <Select name="cuotaCreditoId">
+                    <Select
+                      name="cuotaCreditoId"
+                      defaultValue={pagoEditando?.cuotaCreditoId ?? ""}
+                    >
                       <option value="">Sin cuota</option>
-                      {cuotas.data?.map((x) => (
-                        <option key={x.id} value={x.id}>
-                          #{x.numeroCuota} · {x.fechaProgramada.slice(0, 10)}
-                        </option>
-                      ))}
+                      {cuotas.data
+                        ?.filter((x) => x.estadoCalculado !== "Cancelada")
+                        .map((x) => (
+                          <option key={x.id} value={x.id}>
+                            #{x.numeroCuota} · {x.fechaProgramada.slice(0, 10)}
+                          </option>
+                        ))}
                     </Select>
                   </label>
                   {[
@@ -416,14 +637,31 @@ export function CreditoDetallePagina() {
                       l={
                         k === "otrosCargos"
                           ? "Otros cargos"
-                            : k.charAt(0).toUpperCase() + k.slice(1)
+                          : k.charAt(0).toUpperCase() + k.slice(1)
                       }
                       tipo="number"
+                      valor={
+                        pagoEditando
+                          ? pagoComponentes[k as keyof typeof pagoComponentes]
+                          : undefined
+                      }
                     />
                   ))}
-                  <Campo n="documento" l="Documento" />
-                  <Campo n="metodoPago" l="Método" />
-                  <Campo n="observaciones" l="Observaciones" />
+                  <Campo
+                    n="documento"
+                    l="Documento"
+                    valor={pagoEditando?.documento ?? undefined}
+                  />
+                  <Campo
+                    n="metodoPago"
+                    l="Método"
+                    valor={pagoEditando?.metodoPago ?? undefined}
+                  />
+                  <Campo
+                    n="observaciones"
+                    l="Observaciones"
+                    valor={pagoEditando?.observaciones ?? undefined}
+                  />
                 </div>
                 <h3 className="mt-5 font-bold">Fuentes del pago</h3>
                 {fuentes.map((x, i) => (
@@ -514,15 +752,31 @@ export function CreditoDetallePagina() {
                   >
                     Agregar fuente
                   </Button>
-                  <Button type="submit">Guardar borrador</Button>
+                  <Button type="submit" disabled={!conciliado}>
+                    {pagoEditando ? "Guardar cambios" : "Guardar borrador"}
+                  </Button>
                 </div>
                 <p className="mt-2 text-sm">
-                  Conciliación de fuentes: capital {dinero(componentes.capital)}
-                  , interés {dinero(componentes.interes)}, total{" "}
-                  {dinero(
-                    Object.values(componentes).reduce((a, b) => a + b, 0),
-                  )}
-                  .
+                  Componentes del pago: capital{" "}
+                  {dinero(pagoComponentes.capital)}, interés{" "}
+                  {dinero(pagoComponentes.interes)}, seguro{" "}
+                  {dinero(pagoComponentes.seguro)}, comisión{" "}
+                  {dinero(pagoComponentes.comision)}, mora{" "}
+                  {dinero(pagoComponentes.mora)}, otros{" "}
+                  {dinero(pagoComponentes.otrosCargos)}, total{" "}
+                  {dinero(totalComponentes)}.<br />
+                  Suma de fuentes: capital {dinero(componentes.capital)},
+                  interés {dinero(componentes.interes)}, seguro{" "}
+                  {dinero(componentes.seguro)}, comisión{" "}
+                  {dinero(componentes.comision)}, mora{" "}
+                  {dinero(componentes.mora)}, otros{" "}
+                  {dinero(componentes.otrosCargos)}, total{" "}
+                  {dinero(totalFuentes)}.{" "}
+                  <b>
+                    {conciliado
+                      ? "Conciliado"
+                      : `Diferencia: ${dinero(totalComponentes - totalFuentes)}`}
+                  </b>
                 </p>
               </form>
             )}
@@ -548,13 +802,62 @@ export function CreditoDetallePagina() {
                     Ver detalle
                   </Button>
                   {x.estadoProceso === "Borrador" && (
-                    <Button onClick={() => void confirmar.mutateAsync(x.id)}>
-                      Confirmar
-                    </Button>
+                    <>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void editarPago(x)}
+                      >
+                        Editar
+                      </Button>
+                      <Button
+                        variant="danger"
+                        onClick={async () => {
+                          if (
+                            await requestConfirmation({
+                              title: "Anular borrador",
+                              message:
+                                "El pago y sus fuentes permanecerán en el historial como anulados.",
+                              confirmLabel: "Anular",
+                              cancelLabel: "Volver",
+                            })
+                          ) {
+                            await api(`/creditos/${id}/pagos/${x.id}/anular`, {
+                              method: "POST",
+                            });
+                            await refrescar();
+                          }
+                        }}
+                      >
+                        Anular
+                      </Button>
+                      <Button onClick={() => void confirmar.mutateAsync(x.id)}>
+                        Confirmar
+                      </Button>
+                    </>
                   )}
                 </span>,
               ])}
             />
+            <div className="mt-4 flex items-center justify-end gap-3">
+              <Button
+                variant="secondary"
+                disabled={paginaPagos === 1}
+                onClick={() => setPaginaPagos((x) => x - 1)}
+              >
+                Anterior
+              </Button>
+              <span>
+                {paginaPagos} /{" "}
+                {Math.max(1, Math.ceil((pagos.data?.total ?? 0) / 10))}
+              </span>
+              <Button
+                variant="secondary"
+                disabled={paginaPagos * 10 >= (pagos.data?.total ?? 0)}
+                onClick={() => setPaginaPagos((x) => x + 1)}
+              >
+                Siguiente
+              </Button>
+            </div>
           </Card>
           {pagoDetalle.data && (
             <Card>
@@ -593,31 +896,40 @@ export function CreditoDetallePagina() {
                 Cerrar detalle
               </Button>
               {pagoDetalle.data.pago.estadoProceso === "Confirmado" && (
-                <Button
-                  variant="danger"
-                  onClick={async () => {
-                    if (
-                      await requestConfirmation({
-                        title: "Revertir pago",
-                        message:
-                          "Los movimientos financieros quedarán cancelados.",
-                        confirmLabel: "Revertir",
-                        cancelLabel: "Volver",
-                      })
-                    ) {
-                      await api(`/creditos/${id}/pagos/${detalle}/revertir`, {
-                        method: "POST",
-                        body: JSON.stringify({
-                          motivo: "Reversión autorizada por el usuario",
-                        }),
-                      });
-                      setDetalle(null);
-                      await refrescar();
-                    }
-                  }}
-                >
-                  Revertir
-                </Button>
+                <>
+                  <Input
+                    value={motivoReversion}
+                    onChange={(e) => setMotivoReversion(e.target.value)}
+                    placeholder="Motivo obligatorio de reversión"
+                  />
+                  <Button
+                    variant="danger"
+                    disabled={!motivoReversion.trim()}
+                    onClick={async () => {
+                      if (
+                        await requestConfirmation({
+                          title: "Revertir pago",
+                          message:
+                            "Los movimientos financieros quedarán cancelados.",
+                          confirmLabel: "Revertir",
+                          cancelLabel: "Volver",
+                        })
+                      ) {
+                        await api(`/creditos/${id}/pagos/${detalle}/revertir`, {
+                          method: "POST",
+                          body: JSON.stringify({
+                            motivo: motivoReversion.trim(),
+                          }),
+                        });
+                        setDetalle(null);
+                        setMotivoReversion("");
+                        await refrescar();
+                      }
+                    }}
+                  >
+                    Revertir
+                  </Button>
+                </>
               )}
             </Card>
           )}
@@ -631,11 +943,13 @@ function Campo({
   l,
   tipo = "text",
   requerido = false,
+  valor,
 }: {
   n: string;
   l: string;
   tipo?: string;
   requerido?: boolean;
+  valor?: string | number | undefined;
 }) {
   return (
     <label>
@@ -647,6 +961,7 @@ function Campo({
         step={tipo === "number" ? "0.0001" : undefined}
         min={tipo === "number" ? "0" : undefined}
         required={requerido}
+        defaultValue={valor}
       />
     </label>
   );
