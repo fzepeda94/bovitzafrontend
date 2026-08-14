@@ -427,7 +427,7 @@ export function MovimientosFinancierosPagina() {
         </Card>
       )}
       <Card>
-        <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 [&>*]:min-w-0">
         <Input label="Fecha inicio" type="date" value={fechaInicio} onChange={e=>{setFechaInicio(e.target.value);setPagina(1)}}/><Input label="Fecha fin" type="date" value={fechaFin} onChange={e=>{setFechaFin(e.target.value);setPagina(1)}}/>
         <Select label="Naturaleza" value={filtroNaturaleza} onChange={e=>{setFiltroNaturaleza(e.target.value);setPagina(1)}}><option value="">Todas</option>{naturalezas.map(x=><option key={x}>{x}</option>)}</Select>
         <Select label="Categoría" value={filtroCategoria} onChange={e=>{setFiltroCategoria(e.target.value);setPagina(1)}}><option value="">Todas</option>{categorias.data?.map(x=><option key={x.id} value={x.id}>{x.codigo} · {x.nombre}</option>)}</Select>

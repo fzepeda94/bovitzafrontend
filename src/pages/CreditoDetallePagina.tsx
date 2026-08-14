@@ -163,10 +163,26 @@ export function CreditoDetallePagina() {
       qc.invalidateQueries({ queryKey: ["deuda-cuotas", id] }),
       qc.invalidateQueries({ queryKey: ["deuda-pagos", id] }),
     ]);
+  const resetearFormularioPago = () => {
+    setMostrarPago(false);
+    setPagoEditando(null);
+    setFuentes([cero()]);
+    setPagoComponentes({
+      capital: 0,
+      interes: 0,
+      seguro: 0,
+      comision: 0,
+      mora: 0,
+      otrosCargos: 0,
+    });
+  };
   const confirmar = useMutation({
     mutationFn: (pagoId: string) =>
       api(`/creditos/${id}/pagos/${pagoId}/confirmar`, { method: "POST" }),
-    onSuccess: () => void refrescar(),
+    onSuccess: async () => {
+      resetearFormularioPago();
+      await refrescar();
+    },
   });
   const guardarCuota = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -229,17 +245,7 @@ export function CreditoDetallePagina() {
           body: JSON.stringify(body),
         },
       );
-      setMostrarPago(false);
-      setFuentes([cero()]);
-      setPagoEditando(null);
-      setPagoComponentes({
-        capital: 0,
-        interes: 0,
-        seguro: 0,
-        comision: 0,
-        mora: 0,
-        otrosCargos: 0,
-      });
+      resetearFormularioPago();
       await refrescar();
     } catch (error) {
       notify({
@@ -568,17 +574,9 @@ export function CreditoDetallePagina() {
             <div className="flex justify-end">
               <Button
                 onClick={() => {
-                  setPagoEditando(null);
-                  setFuentes([cero()]);
-                  setPagoComponentes({
-                    capital: 0,
-                    interes: 0,
-                    seguro: 0,
-                    comision: 0,
-                    mora: 0,
-                    otrosCargos: 0,
-                  });
-                  setMostrarPago((x) => !x);
+                  const abrir = !mostrarPago;
+                  resetearFormularioPago();
+                  if (abrir) setMostrarPago(true);
                 }}
               >
                 Registrar pago
@@ -824,6 +822,7 @@ export function CreditoDetallePagina() {
                             await api(`/creditos/${id}/pagos/${x.id}/anular`, {
                               method: "POST",
                             });
+                            resetearFormularioPago();
                             await refrescar();
                           }
                         }}

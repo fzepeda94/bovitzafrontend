@@ -478,7 +478,7 @@ export function LotsPage() {
           </form>
         </Card>
       )}
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid min-w-0 gap-5 lg:grid-cols-3 [&>*]:min-w-0">
         {lots.data?.map((lot) => (
           <Card key={lot.id}>
             <h2 className="font-display text-lg font-bold">{lot.nombre}</h2>
@@ -546,7 +546,7 @@ export function LotsPage() {
                 )}
               </div>
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="mt-5 grid min-w-0 gap-3 sm:grid-cols-3 [&>*]:min-w-0">
               <Metric
                 label="Fecha de desembolso"
                 value={normalizarFechaFormulario(c.fechaDesembolso)}

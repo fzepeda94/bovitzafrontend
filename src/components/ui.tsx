@@ -271,7 +271,7 @@ export const Input = forwardRef<
   ref,
 ) {
   return (
-    <label className="grid gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+    <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
       {label && (
         <span>
           {label}
@@ -290,7 +290,7 @@ export const Input = forwardRef<
       <input
         ref={ref}
         className={`
-          min-h-11
+          min-h-11 w-full min-w-0
           rounded-xl
           border
           bg-white
@@ -340,7 +340,7 @@ export const Select = forwardRef<
   ref,
 ) {
   return (
-    <label className="grid gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+    <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
       {label && (
         <span>
           {label}
@@ -359,7 +359,7 @@ export const Select = forwardRef<
       <select
         ref={ref}
         className={`
-          min-h-11
+          min-h-11 w-full min-w-0
           rounded-xl
           border
           bg-white
